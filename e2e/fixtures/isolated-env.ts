@@ -228,7 +228,7 @@ export const test = base.extend<
 
       // Use vite preview instead of vite dev - much lighter weight
       // We pass the API port via env var so vite.config.ts can set up the proxy
-      const proc = spawn('npx', ['vite', 'preview', '--port', String(port), '--strictPort'], {
+      const proc = spawn('npx', ['vite', 'preview', '--port', String(port), '--strictPort', '--host', '127.0.0.1'], {
         cwd: path.join(PROJECT_ROOT, 'web'),
         env: {
           ...process.env,
