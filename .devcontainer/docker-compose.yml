@@ -4,6 +4,7 @@ services:
     volumes:
       - ..:/workspace:cached
       - /var/run/docker.sock:/var/run/docker.sock
+      - claude_home:/home/node/.claude
     command: sleep infinity
     environment:
       DATABASE_URL: postgres://ship:ship_dev_password@postgres:5432/ship_dev
@@ -29,3 +30,4 @@ services:
 
 volumes:
   postgres_data:
+  claude_home:

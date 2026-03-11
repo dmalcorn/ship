@@ -44,6 +44,9 @@ echo "Seeding database..."
 DATABASE_URL=postgres://ship:ship_dev_password@postgres:5432/ship_dev \
   pnpm --filter @ship/api db:seed
 
+echo "Installing Claude Code CLI..."
+npm install -g @anthropic-ai/claude-code
+
 echo "Setting up Playwright for E2E tests..."
 # Install Docker CLI (needed by testcontainers for isolated E2E test environments)
 sudo apt-get install -y docker-cli 2>/dev/null || true

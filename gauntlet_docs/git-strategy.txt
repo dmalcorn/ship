@@ -1,0 +1,29 @@
+No, worktrees are overkill for what you're describing. Let me reframe:
+
+What the Requirements Actually Call For
+"Forked repo with all improvements on clearly labeled branches"
+→ Just branches pushed to GitHub. No worktrees needed.
+
+"Your improved fork is running and publicly accessible"
+→ One deployed instance. That means you need a single branch — likely master on your fork — that has all your features in it, deployed somewhere public (this project already has AWS/Elastic Beanstalk setup).
+
+The Simpler Workflow
+
+your-fork/master  ← deployed publicly (all features merged here)
+  │
+  ├── feature/feature-1   ← "clearly labeled branch" for reviewer to inspect
+  ├── feature/feature-2
+  ├── feature/feature-3
+  └── ...
+Branch off master for each feature, do the work, push the branch
+Merge each finished feature into your fork's master as you complete them
+Deploy your fork's master to make it publicly accessible
+The upstream owners can then look at each individual branch/PR and choose which ones to accept into the original repo
+The branches serve as the paper trail showing each improvement in isolation. The deployed master on your fork shows everything working together.
+
+What This Means Practically
+Work on one feature at a time in this single devcontainer
+When done: git push origin feature/my-feature (for the labeled branch), then git merge feature/my-feature into your master and deploy
+No worktrees, no parallel instances needed
+The upstream owners get clean PRs from each branch if they want to cherry-pick
+Does that match what you're going for?
