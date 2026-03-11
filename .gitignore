@@ -113,3 +113,10 @@ vendor/
 
 # Vite PWA dev artifacts
 web/dev-dist/
+
+# BMAD Method - generated output and session memory
+_bmad-output/
+_bmad/_memory/
+
+# Cursor IDE (like .vscode)
+.cursor/
