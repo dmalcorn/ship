@@ -10,7 +10,7 @@ Full fix details (root causes, step-by-step fixes, measurement criteria) are in 
 
 | # | Category | Severity | Target |
 |---|---|---|---|
-| 1 | Type Safety | Low | Reduce 878 violations → ≤659 (≥25%) |
+| 1 | Type Safety | Low | Reduce 875 violations → ≤659 (≥25%) |
 | 2 | Bundle Size | **High** | ≥20% initial-load reduction via code splitting |
 | 3 | API Response Time | **High** | ≥20% P95 reduction on ≥2 endpoints |
 | 4 | DB Query Efficiency | Medium | ≥20% query count reduction on ≥1 flow |
@@ -29,23 +29,23 @@ Full fix details (root causes, step-by-step fixes, measurement criteria) are in 
 | `chore/bmad-method` | Install BMAD Method agent framework | Done |
 
 ### Fix Branches (one per category)
-| Branch | Category |
-|---|---|
-| `fix/error-handling` | Cat 6: Runtime error handling (global error middleware, crash guards, UUID validation) |
-| `fix/bundle-size` | Cat 2: Bundle size (devtools gate, lazy emoji picker, manualChunks, dead dep removal) |
-| `fix/api-response-time` | Cat 3: API response time (strip content column, type filter, pagination) |
-| `fix/db-query-efficiency` | Cat 4: DB query efficiency (trgm index, session skip-update, statement_timeout) |
-| `fix/type-safety` | Cat 1: Type safety (Express augmentation, DB row types, yjsConverter, tsconfig) |
-| `fix/test-coverage` | Cat 5: Test coverage (fix rate-limiter contamination in auth.test.ts, fix E2E flakiness, add 3 critical path tests) |
-| `fix/accessibility` | Cat 7: Accessibility (color contrast, skip-nav link, Radix dialog) |
+| Branch | Category | Status |
+|---|---|---|
+| `fix/error-handling` | Cat 6: Runtime error handling (global error middleware, crash guards, UUID validation) | ✅ Done — needs merge to master |
+| `fix/bundle-size` | Cat 2: Bundle size (devtools gate, lazy emoji picker, manualChunks, dead dep removal) | 🔄 In progress |
+| `fix/api-response-time` | Cat 3: API response time (strip content column, type filter, pagination) | ⏳ Not started — must cut from merged Cat 6 |
+| `fix/db-query-efficiency` | Cat 4: DB query efficiency (trgm index, session skip-update, statement_timeout) | ⏳ Not started |
+| `fix/type-safety` | Cat 1: Type safety (Express augmentation, DB row types, yjsConverter, tsconfig) | ⏳ Not started |
+| `fix/test-coverage` | Cat 5: Test coverage (fix rate-limiter contamination in auth.test.ts, fix returnTo assertion, fix E2E flakiness, add 3 critical path tests) | ⏳ Not started — absolute last |
+| `fix/accessibility` | Cat 7: Accessibility (color contrast, skip-nav link, Radix dialog) | ⏳ Not started |
 
 ### Recommended implementation order
 
-**PRE-SPRINT (before any code):** Capture all baseline evidence artifacts — unit test results, E2E test results, autocannon P95 benchmarks, bundle visualizer output, axe-core violations, type violation counts. These are required proof for all 7 categories.
+**PRE-SPRINT:** ✅ Complete — all baselines captured in `gauntlet_docs/baselines.md`.
 
 ```
 Track A (sequential — middleware chain dependency):
-  Cat 6 (error-handling) → MERGE TO MASTER → Cat 3 (api-response-time)
+  Cat 6 (error-handling) ✅ → MERGE TO MASTER ← DO THIS NEXT → Cat 3 (api-response-time)
 
 Track B (isolated — run parallel with Track A after pre-sprint):
   Cat 4 (db-query-efficiency) → Cat 2 (bundle-size)
@@ -56,7 +56,7 @@ After all above merged:
   Cat 5 (test-coverage) ← absolute last, validates all other fixes
 ```
 
-**Merge gate:** Cat 3 must be cut from a merged Cat 6 branch — not from master — because both touch the Express middleware chain. Starting Cat 3 on an unstable Cat 6 base causes compounding merge conflicts.
+**⚠️ Next action:** Merge `fix/error-handling` → `master` before starting Cat 3. Cat 3 must branch from the merged Cat 6 base — both touch the Express middleware chain and starting Cat 3 on an unmerged Cat 6 causes compounding merge conflicts.
 
 **Rationale:** Cat 4 and Cat 2 are purely additive/isolated (DB indexes + build config) with zero regression risk, making them the safest fast wins. Cat 1 is last among code changes because it touches the most files. Cat 5 is absolute last so the 3 new meaningful tests can validate behavior introduced by all other fixes.
 
