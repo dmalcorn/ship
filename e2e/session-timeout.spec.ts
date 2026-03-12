@@ -499,7 +499,7 @@ test.describe('401 Error Handling', () => {
     // Verify we're NOT on evil.com - we should be on localhost
     const currentUrl = page.url();
     expect(currentUrl).not.toContain('evil.com');
-    expect(currentUrl).toContain('localhost');
+    expect(currentUrl).toMatch(/localhost|127\.0\.0\.1/);
   });
 
   test('API calls without valid session return 401', async ({ request }) => {

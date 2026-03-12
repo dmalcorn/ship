@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import request from 'supertest'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
@@ -12,7 +12,7 @@ function getCookiesArray(setCookie: string | string[] | undefined): string[] {
 }
 
 describe('Auth API', () => {
-  const app = createApp()
+  let app = createApp()
   const testRunId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
   const testEmail = `auth-test-${testRunId}@ship.local`
   const testPassword = 'TestPassword123!'
@@ -78,6 +78,11 @@ describe('Auth API', () => {
   })
 
   describe('POST /api/auth/login', () => {
+    // Create a fresh app per test to isolate the in-memory rate-limiter state.
+    // Without this, failed login attempts from earlier tests exhaust the rate-limiter
+    // bucket and cause subsequent tests to receive 429 instead of the expected 400/401.
+    beforeEach(() => { app = createApp() })
+
     it('should reject login without email', async () => {
       const { csrfToken, cookie } = await getCsrfTokenAndCookie()
       const res = await request(app)

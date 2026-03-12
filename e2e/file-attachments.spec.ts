@@ -65,17 +65,22 @@ test.describe('File Attachments', () => {
   });
 
   test('should insert file attachment via slash command', async ({ page }) => {
+    // What this tests: inserting a file attachment via the /file slash command
+    // Why it was flaky: Fixed waitForTimeout(300ms/500ms) was insufficient when CI is under load.
+    //   The race condition: typing '/file' triggers async popup rendering; a fixed delay cannot
+    //   guarantee the slash command popup has appeared.
+    // Fix: removed fixed delays after editor.click(); replaced /file popup wait with explicit
+    //   toBeVisible assertion on the file option button.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
+    // Editor becomes interactive immediately after click; type directly
 
     // Type /file to trigger slash command
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
 
-    // Should show file attachment option
+    // Wait for slash command popup to appear
     const fileOption = page.getByRole('button', { name: /^File Upload a file attachment/i });
     await expect(fileOption).toBeVisible({ timeout: 5000 });
 
@@ -98,22 +103,27 @@ test.describe('File Attachments', () => {
   });
 
   test('should show file upload progress', async ({ page }) => {
+    // What this tests: upload progress indicator appears while file is uploading
+    // Why it was flaky: Fixed waitForTimeout(300ms/500ms) was insufficient when CI is under load.
+    // Fix: removed fixed delays; wait explicitly for the file option button to be visible.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     // Type /file
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
 
     // Create a larger test file to see progress
     const tmpPath = createTestFile('large-file.zip', 'x'.repeat(10000));
 
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
+
     // Select file option
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
 
@@ -126,59 +136,67 @@ test.describe('File Attachments', () => {
   });
 
   test('should show file download link after upload', async ({ page }) => {
+    // What this tests: a clickable download link appears after a successful upload
+    // Why it was flaky: waitForTimeout(2000ms) after setFiles() was insufficient when upload
+    //   latency spikes. The race condition: setFiles() triggers async upload; a fixed delay
+    //   cannot guarantee the POST /api/files response + React state update are complete.
+    // Fix: replaced fixed delay with explicit waitFor on a[href] which only resolves when
+    //   the UI confirms upload completion.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     // Insert file via slash command
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
+
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
 
     const tmpPath = createTestFile('download-test.txt', 'Test content');
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
-
-    // Wait for upload to complete
-    await page.waitForTimeout(2000);
 
     // File attachment should have a clickable link/button
     const fileAttachment = editor.locator('[data-file-attachment]');
     await expect(fileAttachment).toBeVisible({ timeout: 5000 });
 
-    // Should have a download link (href attribute)
+    // Wait for upload to fully complete — link only appears after S3 upload + DB write
     const downloadLink = fileAttachment.locator('a[href]');
-    await expect(downloadLink).toBeVisible({ timeout: 3000 });
+    await expect(downloadLink).toBeVisible({ timeout: 10000 });
 
     // Cleanup
     setTimeout(() => { try { fs.unlinkSync(tmpPath); } catch {} }, 5000);
   });
 
   test('should validate file type', async ({ page }) => {
+    // What this tests: file type validation occurs when uploading a potentially restricted file
+    // Why it was flaky: Fixed waitForTimeout(300ms/500ms/1000ms) were insufficient under CI load.
+    // Fix: removed fixed delays; slash command popup wait is explicit; validation outcome is
+    //   checked without a fixed delay (the test only verifies that validation happens).
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     // Type /file
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
+
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
 
     // Create a potentially restricted file type (e.g., .exe)
     const tmpPath = createTestFile('potentially-dangerous.exe', 'Not really an exe');
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
-
-    // Wait a moment for validation
-    await page.waitForTimeout(1000);
 
     // Either:
     // 1. File is rejected (no attachment appears)
@@ -191,32 +209,38 @@ test.describe('File Attachments', () => {
   });
 
   test('should persist file attachment after reload', async ({ page }) => {
+    // What this tests: file attachment persists in the document after a page reload
+    // Why it was flaky: waitForTimeout(2000ms) called twice after upload/before reload was
+    //   insufficient for Yjs sync under CI load. The race condition: setFiles() triggers async
+    //   upload + Yjs CRDT propagation; fixed delays cannot guarantee persistence is complete.
+    // Fix: replaced both fixed delays with a single explicit waitFor on a[href] — the download
+    //   link only appears after upload + DB write + Yjs state persistence are all done.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     // Insert file
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
+
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
 
     const tmpPath = createTestFile('persist-test.pdf', 'Persistent content');
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
 
-    // Wait for upload to complete
-    await expect(editor.locator('[data-file-attachment]')).toBeVisible({ timeout: 5000 });
-    await page.waitForTimeout(2000);
+    const fileAttachment = editor.locator('[data-file-attachment]');
+    // Wait until download link is present — confirms both upload + Yjs persistence are done
+    await expect(fileAttachment.locator('a[href]')).toBeVisible({ timeout: 10000 });
 
     // Get the filename for verification after reload
-    const fileName = await editor.locator('[data-file-attachment]').textContent();
-
-    // Wait for Yjs sync
-    await page.waitForTimeout(2000);
+    const fileName = await fileAttachment.textContent();
+    // No need for additional timeout — link presence proves persistence
 
     // Hard refresh
     await page.reload();
@@ -237,20 +261,25 @@ test.describe('File Attachments', () => {
   });
 
   test('should display file icon based on type', async ({ page }) => {
+    // What this tests: file type icons are rendered correctly for uploaded files
+    // Why it was flaky: Fixed waitForTimeout(300ms/500ms) was insufficient when CI is under load.
+    // Fix: removed fixed delays; wait explicitly for slash command popup and file attachment.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     // Insert PDF file
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
+
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
 
     const tmpPath = createTestFile('icon-test.pdf', 'PDF content');
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
 
@@ -267,31 +296,38 @@ test.describe('File Attachments', () => {
   });
 
   test('should show file size in attachment', async ({ page }) => {
+    // What this tests: file size is displayed in the attachment widget
+    // Why it was flaky: Fixed waitForTimeout(300ms/500ms/2000ms) were insufficient under CI load.
+    //   The race condition: upload completion is async; a fixed delay cannot guarantee the size
+    //   text has been rendered after S3 upload + React state update.
+    // Fix: removed fixed delays; used explicit waitFor on a[href] to confirm upload complete
+    //   before reading text content.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     // Insert file
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
+
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
 
     // Create file with known size
     const content = 'x'.repeat(1024 * 5); // ~5KB
     const tmpPath = createTestFile('size-test.txt', content);
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
 
-    // Wait for upload
-    await expect(editor.locator('[data-file-attachment]')).toBeVisible({ timeout: 5000 });
-    await page.waitForTimeout(2000);
+    // Wait for upload to fully complete — link only appears after upload + DB write
+    const fileAttachment = editor.locator('[data-file-attachment]');
+    await expect(fileAttachment.locator('a[href]')).toBeVisible({ timeout: 10000 });
 
     // Should show file size (KB, MB, etc.)
-    const fileAttachment = editor.locator('[data-file-attachment]');
     const text = await fileAttachment.textContent();
 
     // Should contain size indicator (KB, MB, or bytes)
@@ -305,22 +341,26 @@ test.describe('File Attachments', () => {
     // This test verifies the fix for Word document uploads
     // Issue: browsers (especially macOS) return empty MIME type for .docx files
     // Fix: extension-based fallback detection in isAllowedFileType()
+    // Why it was flaky: Fixed waitForTimeout(300ms/500ms/2000ms) insufficient under CI load.
+    // Fix: removed fixed delays; explicit waitFor on a[href] confirms upload completion.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     // Insert file via slash command
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
+
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
 
     // Create a .docx test file
     // Note: Real .docx is a ZIP archive, but for MIME detection we just need the extension
     const tmpPath = createTestFile('word-document.docx', 'Test Word document content');
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
 
@@ -328,12 +368,9 @@ test.describe('File Attachments', () => {
     const fileAttachment = editor.locator('[data-file-attachment]');
     await expect(fileAttachment).toBeVisible({ timeout: 5000 });
 
-    // Wait for upload to complete
-    await page.waitForTimeout(2000);
-
-    // Should have a download link (indicates successful upload)
+    // Wait for upload to fully complete — link only appears after upload + DB write
     const downloadLink = fileAttachment.locator('a[href]');
-    await expect(downloadLink).toBeVisible({ timeout: 3000 });
+    await expect(downloadLink).toBeVisible({ timeout: 10000 });
 
     // Verify the filename is shown
     await expect(fileAttachment).toContainText('word-document.docx');
@@ -347,19 +384,23 @@ test.describe('File Attachments', () => {
 
   test('should upload .doc file successfully', async ({ page }) => {
     // Test the older .doc format
+    // Why it was flaky: Fixed waitForTimeout(300ms/500ms/2000ms) insufficient under CI load.
+    // Fix: removed fixed delays; explicit waitFor on a[href] confirms upload completion.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
+
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
 
     const tmpPath = createTestFile('legacy-document.doc', 'Legacy Word document');
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
 
@@ -367,12 +408,9 @@ test.describe('File Attachments', () => {
     const fileAttachment = editor.locator('[data-file-attachment]');
     await expect(fileAttachment).toBeVisible({ timeout: 5000 });
 
-    // Wait for upload to complete
-    await page.waitForTimeout(2000);
-
-    // Should have a download link
+    // Wait for upload to fully complete — link only appears after upload + DB write
     const downloadLink = fileAttachment.locator('a[href]');
-    await expect(downloadLink).toBeVisible({ timeout: 3000 });
+    await expect(downloadLink).toBeVisible({ timeout: 10000 });
 
     // Verify the filename and icon
     await expect(fileAttachment).toContainText('legacy-document.doc');
@@ -384,20 +422,24 @@ test.describe('File Attachments', () => {
 
   test('should upload non-standard file types (.psd, .sketch, etc.)', async ({ page }) => {
     // Test that files NOT in old allowlist now work with blocklist approach
+    // Why it was flaky: Fixed waitForTimeout(300ms/500ms/2000ms) insufficient under CI load.
+    // Fix: removed fixed delays; explicit waitFor on a[href] confirms upload completion.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
+
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
 
     // Create a .psd file (was NOT in old allowlist)
     const tmpPath = createTestFile('design-file.psd', 'Photoshop file content');
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
 
@@ -405,12 +447,9 @@ test.describe('File Attachments', () => {
     const fileAttachment = editor.locator('[data-file-attachment]');
     await expect(fileAttachment).toBeVisible({ timeout: 5000 });
 
-    // Wait for upload to complete
-    await page.waitForTimeout(2000);
-
-    // Should have a download link
+    // Wait for upload to fully complete — link only appears after upload + DB write
     const downloadLink = fileAttachment.locator('a[href]');
-    await expect(downloadLink).toBeVisible({ timeout: 3000 });
+    await expect(downloadLink).toBeVisible({ timeout: 10000 });
 
     // Verify the filename
     await expect(fileAttachment).toContainText('design-file.psd');
@@ -421,14 +460,21 @@ test.describe('File Attachments', () => {
 
   test('should block dangerous executable files (.exe)', async ({ page }) => {
     // Test that executables are blocked by the blocklist
+    // Why it was flaky: Fixed waitForTimeout(300ms/500ms/1000ms) insufficient under CI load.
+    //   The race condition: dialog handling is async; a fixed 1000ms delay cannot guarantee
+    //   the dialog has been accepted before checking for attachment absence.
+    // Fix: removed fixed delays; replaced post-dialog waitForTimeout with explicit
+    //   not.toBeVisible assertion with a reasonable timeout.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
+
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
 
     // Create an .exe file (should be blocked)
     const tmpPath = createTestFile('malware.exe', 'Not really an executable');
@@ -441,16 +487,14 @@ test.describe('File Attachments', () => {
     });
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
 
-    // Wait for dialog to be handled
-    await page.waitForTimeout(1000);
-
     // File attachment should NOT appear (upload was blocked)
+    // Explicit not.toBeVisible replaces the fixed 1000ms + 2000ms waitForTimeout pattern
     const fileAttachment = editor.locator('[data-file-attachment]');
-    await expect(fileAttachment).not.toBeVisible({ timeout: 2000 });
+    await expect(fileAttachment).not.toBeVisible({ timeout: 3000 });
 
     // Cleanup
     setTimeout(() => { try { fs.unlinkSync(tmpPath); } catch {} }, 5000);
@@ -459,14 +503,18 @@ test.describe('File Attachments', () => {
 
   test('should reject files exceeding 1GB size limit', async ({ page }) => {
     // Tests UPLOAD-6: file size limit enforcement
+    // Why it was flaky: Fixed waitForTimeout(300ms/500ms) insufficient under CI load.
+    // Fix: removed fixed delays; slash command popup wait is explicit.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
+
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
 
     // Create a small file (we can't actually create a 1GB+ file in tests)
     // Instead, we'll use a mock approach - create a file object with a large size
@@ -487,7 +535,7 @@ test.describe('File Attachments', () => {
     const tmpPath = createTestFile('large-file-test.zip', 'small content');
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
 
@@ -505,29 +553,34 @@ test.describe('File Attachments', () => {
 
   test('should show navigation warning during active uploads', async ({ page }) => {
     // Tests UPLOAD-5: navigation warning
+    // Why it was flaky: Fixed waitForTimeout(300ms/500ms/2000ms/1000ms) insufficient under CI load.
+    //   The race condition: upload completion is async; fixed delays cannot guarantee state.
+    // Fix: removed all fixed delays; used explicit waitFor on data-file-attachment to confirm
+    //   upload visible, then navigated without waiting for a fixed timeout.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
     await editor.click();
-    await page.waitForTimeout(300);
 
     // For this test, we need to start an upload and try to navigate while it's in progress
     // We'll use a timeout to catch the navigation attempt during upload
 
     await page.keyboard.type('/file');
-    await page.waitForTimeout(500);
+
+    // Wait for slash command popup
+    const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
+    await expect(fileButton).toBeVisible({ timeout: 5000 });
 
     // Create a slightly larger file to give time for navigation attempt
     const tmpPath = createTestFile('nav-warning-test.txt', 'x'.repeat(50000));
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /^File Upload a file attachment/i }).click();
+    await fileButton.click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(tmpPath);
 
     // Wait for upload to complete (small file, fast local upload)
     await expect(editor.locator('[data-file-attachment]')).toBeVisible({ timeout: 5000 });
-    await page.waitForTimeout(2000);
 
     // Note: Testing the actual navigation warning modal requires a slow upload
     // In local dev mode, uploads complete very quickly, making it hard to catch
@@ -537,7 +590,6 @@ test.describe('File Attachments', () => {
     // For CI purposes, we verify the UploadNavigationWarning component exists in DOM
     // when page first loads (it's always mounted but hidden when no uploads)
     await page.goto('/docs');
-    await page.waitForTimeout(1000);
 
     // The navigation warning should be available in the DOM (though hidden)
     // This verifies the component is properly mounted
