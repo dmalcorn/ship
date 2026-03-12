@@ -17,7 +17,10 @@
 | Branch | Categories | Status |
 |--------|-----------|--------|
 | `fix/error-handling` | Cat 6: Runtime error handling | ✅ Merged to master |
-| `fix/bundle-size` | Cat 2, 3, 4, 1: Bundle, API response, DB efficiency, type safety | Needs merge |
+| `fix/bundle-size` | Cat 2: Bundle size | Needs merge |
+| `fix/api-response-time` | Cat 3: API response time | Needs merge |
+| `fix/db-query-efficiency` | Cat 4: DB query efficiency | Needs merge |
+| `fix/type-safety` | Cat 1: Type safety | Needs merge |
 | `fix/test-coverage` | Cat 5: Test coverage | Needs merge |
 | `fix/accessibility` | Cat 7: Accessibility | Needs merge |
 

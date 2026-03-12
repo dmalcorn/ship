@@ -18,7 +18,7 @@ So that graders can verify the live application works end-to-end with all 7 impr
    **Then** the deployed application URL is documented in the README and in `gauntlet_docs/submission.md`
 
 3. **Given** all 7 improvement branches exist on the fork's GitHub
-   **Then** all branch names are preserved for reviewer inspection (`fix/error-handling`, `fix/bundle-size`, `fix/test-coverage`, `fix/accessibility`)
+   **Then** all branch names are preserved for reviewer inspection (`fix/error-handling`, `fix/bundle-size`, `fix/api-response-time`, `fix/db-query-efficiency`, `fix/type-safety`, `fix/test-coverage`, `fix/accessibility`)
 
 ## Tasks / Subtasks
 
@@ -26,13 +26,19 @@ So that graders can verify the live application works end-to-end with all 7 impr
   - [ ] **CRITICAL PREREQUISITE:** Confirm all 7 epics are done before proceeding
   - [ ] Check CLAUDE.md for branch status:
     - `fix/error-handling` — ✅ already merged to master
-    - `fix/bundle-size` (covers Cat 2, 3, 4, 1) — needs merge
+    - `fix/bundle-size` (Cat 2) — needs merge
+    - `fix/api-response-time` (Cat 3) — needs merge
+    - `fix/db-query-efficiency` (Cat 4) — needs merge
+    - `fix/type-safety` (Cat 1) — needs merge
     - `fix/test-coverage` (Cat 5) — needs merge
     - `fix/accessibility` (Cat 7) — needs merge
   - [ ] For each unmerged branch:
     ```bash
     git checkout master
     git merge fix/bundle-size
+    git merge fix/api-response-time
+    git merge fix/db-query-efficiency
+    git merge fix/type-safety
     git merge fix/test-coverage
     git merge fix/accessibility
     ```
@@ -42,6 +48,9 @@ So that graders can verify the live application works end-to-end with all 7 impr
 
 - [ ] Task 2: Push all fix branches to GitHub (AC: #3)
   - [ ] `git push origin fix/bundle-size`
+  - [ ] `git push origin fix/api-response-time`
+  - [ ] `git push origin fix/db-query-efficiency`
+  - [ ] `git push origin fix/type-safety`
   - [ ] `git push origin fix/test-coverage`
   - [ ] `git push origin fix/accessibility`
   - [ ] `fix/error-handling` was already pushed — verify it's still on remote
@@ -76,10 +85,13 @@ So that graders can verify the live application works end-to-end with all 7 impr
 
 Per CLAUDE.md, the fix branches are:
 
-| Branch | Categories Covered | Status |
-|--------|-------------------|--------|
+| Branch | Category | Status |
+|--------|----------|--------|
 | `fix/error-handling` | Cat 6: Runtime error handling | ✅ Merged to master |
-| `fix/bundle-size` | Cat 2 + Cat 3 + Cat 4 + Cat 1 (bundle, API time, DB efficiency, type safety) | On branch, needs merge |
+| `fix/bundle-size` | Cat 2: Bundle size | On branch, needs merge |
+| `fix/api-response-time` | Cat 3: API response time | On branch, needs merge |
+| `fix/db-query-efficiency` | Cat 4: DB query efficiency | On branch, needs merge |
+| `fix/type-safety` | Cat 1: Type safety | On branch, needs merge |
 | `fix/test-coverage` | Cat 5: Test coverage | On branch, needs merge |
 | `fix/accessibility` | Cat 7: Accessibility | On branch, needs merge |
 
