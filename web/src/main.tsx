@@ -262,7 +262,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           </ReviewQueueProvider>
         </BrowserRouter>
       </ToastProvider>
-      <ReactQueryDevtools initialIsOpen={false} />
+      {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </PersistQueryClientProvider>
   </React.StrictMode>
 );
