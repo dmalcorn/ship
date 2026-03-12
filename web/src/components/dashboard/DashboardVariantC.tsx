@@ -118,13 +118,13 @@ function buildTimeline(actionItems: ActionItem[], weekNumber: number): TimelineD
   // Plans are due Monday
   const planItem = actionItems.find(a => a.type === 'plan' && a.sprint_number === weekNumber);
   if (planItem) {
-    days[0].rituals.push({
+    days[0]!.rituals.push({
       label: `Plan W${weekNumber}`,
       status: planItem.urgency === 'overdue' ? 'overdue' : 'due',
       sprintId: planItem.sprint_id,
     });
   } else {
-    days[0].rituals.push({
+    days[0]!.rituals.push({
       label: `Plan W${weekNumber}`,
       status: 'done',
     });
@@ -133,20 +133,20 @@ function buildTimeline(actionItems: ActionItem[], weekNumber: number): TimelineD
   // Retro for previous week is also due Monday
   const retroItem = actionItems.find(a => a.type === 'retro' && a.sprint_number === weekNumber - 1);
   if (retroItem) {
-    days[0].rituals.push({
+    days[0]!.rituals.push({
       label: `Retro W${weekNumber - 1}`,
       status: retroItem.urgency === 'overdue' ? 'overdue' : 'due',
       sprintId: retroItem.sprint_id,
     });
   } else {
-    days[0].rituals.push({
+    days[0]!.rituals.push({
       label: `Retro W${weekNumber - 1}`,
       status: 'done',
     });
   }
 
   // Retro for current week is due Thursday
-  days[3].rituals.push({
+  days[3]!.rituals.push({
     label: `Retro W${weekNumber}`,
     status: 'future',
   });

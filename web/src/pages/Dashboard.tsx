@@ -134,11 +134,11 @@ export function DashboardPage() {
           <div className="mx-auto max-w-6xl">
             {overdueItems.length === 1 ? (
               <Link
-                to={`/documents/${overdueItems[0].sprint_id}`}
+                to={`/documents/${overdueItems[0]!.sprint_id}`}
                 className="flex items-center gap-2 hover:underline"
               >
                 <span className="font-medium">
-                  {overdueItems[0].program_name} Week {overdueItems[0].sprint_number} is missing a {overdueItems[0].type}
+                  {overdueItems[0]!.program_name} Week {overdueItems[0]!.sprint_number} is missing a {overdueItems[0]!.type}
                 </span>
                 <span className="text-red-200">&rarr; Write now</span>
               </Link>
