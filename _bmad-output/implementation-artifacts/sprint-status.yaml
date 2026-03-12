@@ -1,0 +1,113 @@
+# generated: 2026-03-11
+# project: workspace (ShipShape Week 4 Gauntlet)
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: /workspace/_bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-03-11
+project: workspace
+project_key: NOKEY
+tracking_system: file-system
+story_location: "{project-root}/_bmad-output/implementation-artifacts"
+
+development_status:
+  # ─── Epic 1: Crash-Safe & Secure API Responses ───────────────────────────────
+  epic-1: in-progress
+  1-1-capture-all-7-category-baselines: review
+  1-2-global-express-error-middleware: ready-for-dev
+  1-3-process-level-crash-guards: ready-for-dev
+  1-4-uuid-path-parameter-validation: ready-for-dev
+  1-5-cat-6-after-evidence-and-improvement-documentation: ready-for-dev
+  epic-1-retrospective: optional
+
+  # ─── Epic 2: Faster Initial Page Load ────────────────────────────────────────
+  epic-2: in-progress
+  2-1-gate-reactquerydevtools-behind-dev-flag: ready-for-dev
+  2-2-remove-dead-dependency: ready-for-dev
+  2-3-lazy-load-emoji-picker: ready-for-dev
+  2-4-add-manualchunks-for-stable-vendors: ready-for-dev
+  2-5-cat-2-after-evidence-and-improvement-documentation: ready-for-dev
+  epic-2-retrospective: optional
+
+  # ─── Epic 3: Faster API & Scalable Data Fetching ─────────────────────────────
+  epic-3: in-progress
+  3-1-strip-content-column-from-issues-list: ready-for-dev
+  3-2-add-document-type-filter-parameter: ready-for-dev
+  3-3-add-pagination-to-documents-endpoint: ready-for-dev
+  3-4-update-frontend-sidebar-to-use-paginated-endpoint: ready-for-dev
+  3-5-cat-3-after-evidence-and-improvement-documentation: ready-for-dev
+  epic-3-retrospective: optional
+
+  # ─── Epic 4: Reliable Database Performance ───────────────────────────────────
+  epic-4: backlog
+  4-1-add-pg-trgm-gin-index-for-ilike-search: backlog
+  4-2-conditional-session-update: backlog
+  4-3-add-statement-timeout-to-connection-pool: backlog
+  4-4-cat-4-after-evidence-and-improvement-documentation: backlog
+  epic-4-retrospective: optional
+
+  # ─── Epic 5: Type-Safe, Maintainable Codebase ────────────────────────────────
+  epic-5: backlog
+  5-1-express-request-augmentation: backlog
+  5-2-typed-database-row-interfaces: backlog
+  5-3-type-yjsconverter-with-unknown-and-narrowing-guards: backlog
+  5-4-align-web-tsconfig-with-root-strict-flags: backlog
+  5-5-cat-1-after-evidence-and-improvement-documentation: backlog
+  epic-5-retrospective: optional
+
+  # ─── Epic 6: Accessible to All Users ─────────────────────────────────────────
+  epic-6: backlog
+  6-1-fix-color-contrast-violations: backlog
+  6-2-add-skip-navigation-link: backlog
+  6-3-replace-conversiondialog-with-radix-dialog: backlog
+  6-4-cat-7-after-evidence-and-improvement-documentation: backlog
+  epic-6-retrospective: optional
+
+  # ─── Epic 7: Reliable Test Suite ─────────────────────────────────────────────
+  epic-7: backlog
+  7-1-fix-file-attachments-spec-flakiness: backlog
+  7-2-new-test-document-creation-with-invalid-input: backlog
+  7-3-new-test-session-expiry-redirect: backlog
+  7-4-new-test-mention-search-returns-correct-results: backlog
+  7-5-cat-5-after-evidence-and-improvement-documentation: backlog
+  epic-7-retrospective: optional
+
+  # ─── Epic 8: Submission Package ──────────────────────────────────────────────
+  epic-8: backlog
+  8-1-write-discovery-write-up: backlog
+  8-2-update-readme-setup-guide: backlog
+  8-3-verify-codebase-orientation-checklist: backlog
+  8-4-deploy-improved-fork-to-aws: backlog
+  8-5-record-demo-video: backlog
+  8-6-complete-ai-cost-analysis: backlog
+  8-7-publish-social-post: backlog
+  epic-8-retrospective: optional
