@@ -64,7 +64,7 @@ development_status:
   3-2-add-document-type-filter-parameter: ready-for-dev
   3-3-add-pagination-to-documents-endpoint: ready-for-dev
   3-4-update-frontend-sidebar-to-use-paginated-endpoint: ready-for-dev
-  3-5-cat-3-after-evidence-and-improvement-documentation: ready-for-dev
+  3-5-cat-3-after-evidence-and-improvement-documentation: review
   epic-3-retrospective: optional
 
   # ─── Epic 4: Reliable Database Performance ───────────────────────────────────
