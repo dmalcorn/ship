@@ -32,11 +32,22 @@ for f in "$E2E_DIR"/*.spec.ts; do
     continue
   fi
 
-  # Use awk for stateful parsing of test bodies
+  # Use awk for stateful parsing of test bodies.
+  # Tracks brace depth so nested });  inside callbacks (fetch, context.route, etc.)
+  # don't prematurely end the test scan.
   empty_count=$(awk '
     /^[[:space:]]*test\(/ && !/test\.fixme/ && !/test\.skip/ && !/test\.todo/ {
       in_test = 1
       has_content = 0
+      depth = 0
+    }
+    in_test {
+      # Count opening and closing braces on this line
+      n = split($0, chars, "")
+      for (i = 1; i <= n; i++) {
+        if (chars[i] == "{") depth++
+        if (chars[i] == "}") depth--
+      }
     }
     in_test && /expect\(/ {
       has_content = 1
@@ -44,7 +55,16 @@ for f in "$E2E_DIR"/*.spec.ts; do
     in_test && /page\./ {
       has_content = 1
     }
-    in_test && /^\s*}\);/ {
+    in_test && /apiServer\./ {
+      has_content = 1
+    }
+    in_test && /request\./ {
+      has_content = 1
+    }
+    in_test && /context\./ {
+      has_content = 1
+    }
+    in_test && depth == 0 {
       if (!has_content) {
         empty_count++
       }

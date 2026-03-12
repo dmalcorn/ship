@@ -1,0 +1,38 @@
+{
+  "name": "Ship",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
+
+  // Forward API and web dev server ports to the host
+  "forwardPorts": [3000, 5173],
+  "portsAttributes": {
+    "3000": { "label": "API Server", "onAutoForward": "notify" },
+    "5173": { "label": "Web Dev Server", "onAutoForward": "openBrowser" }
+  },
+
+  // Set up pnpm, install deps, migrate, and seed after container creation
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.vscode-typescript-next",
+        "ms-azuretools.vscode-docker",
+        "antfu.unocss"
+      ],
+      "settings": {
+        "typescript.preferences.importModuleSpecifier": "relative",
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+
+  // Run as the non-root node user that the devcontainers image provides
+  "remoteUser": "node"
+}
