@@ -241,5 +241,31 @@ export function createApp(corsOrigin: string = 'http://localhost:5173'): express
     console.warn('CAIA initialization failed:', err);
   });
 
+  // Global error handler — MUST be last middleware, after all routes
+  // Express identifies 4-argument functions as error handlers
+  app.use((err: Error & { type?: string; code?: string }, req: Request, res: Response, next: NextFunction) => {
+    // Log full error internally — never expose stack traces to clients
+    console.error('[unhandled-error]', err.message, err.stack);
+
+    // Avoid double-response if headers already sent (e.g. streaming)
+    if (res.headersSent) return next(err);
+
+    // body-parser JSON parse failure
+    if (err.type === 'entity.parse.failed') {
+      return res.status(400).json({ error: 'Invalid request body' });
+    }
+
+    // CSRF token failure (csrf-sync throws with message containing 'csrf')
+    if (
+      err.message?.toLowerCase().includes('csrf') ||
+      (err as any).code === 'EBADCSRFTOKEN'
+    ) {
+      return res.status(403).json({ error: 'CSRF token missing or invalid' });
+    }
+
+    // All other unhandled errors
+    res.status(500).json({ error: 'Internal server error' });
+  });
+
   return app;
 }
