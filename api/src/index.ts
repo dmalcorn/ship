@@ -10,6 +10,22 @@ const __dirname = dirname(__filename);
 config({ path: join(__dirname, '../.env.local') });
 config({ path: join(__dirname, '../.env') });
 
+// Process-level crash guards — must be registered before main() so they
+// catch errors even if startup itself fails.
+
+process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
+  // Log and continue — unhandledRejection does not leave the process in
+  // an unknown state. In production, CloudWatch picks up stderr.
+  console.error('[unhandledRejection] Unhandled promise rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err: Error) => {
+  // uncaughtException leaves the process in an undefined state — exit is required.
+  // Elastic Beanstalk health check will detect the exit and trigger restart.
+  console.error('[uncaughtException] Uncaught exception:', err.message, err.stack);
+  process.exit(1);
+});
+
 async function main() {
   // Load secrets from SSM in production (before importing app)
   if (process.env.NODE_ENV === 'production') {
