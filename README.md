@@ -27,6 +27,14 @@ Ship is a project management tool that combines documentation, issue tracking, a
 
 ---
 
+## Live Demo
+
+The improved fork is deployed at: **https://ship.awsdev.treasury.gov**
+
+API health check: http://ship-api-prod.eba-xsaqsg9h.us-east-1.elasticbeanstalk.com/health
+
+---
+
 ## How to Use Ship
 
 Ship has four main views, each designed for different questions:
@@ -79,13 +87,24 @@ The goal isn't to check boxes. It's to capture what your team learned so you can
 
 ## Getting Started
 
-### Prerequisites
+### Choose Your Setup Path
+
+| Path | When to use |
+|------|-------------|
+| **[Docker (recommended)](#setup-docker-recommended)** | You have Docker Desktop installed |
+| **[Native](#setup-native-postgresql)** | You have PostgreSQL installed and running locally |
+
+---
+
+### Setup: Docker (recommended)
+
+#### Prerequisites
 
 - [Node.js](https://nodejs.org/) 20 or newer
 - [pnpm](https://pnpm.io/) (`npm install -g pnpm`)
-- [Docker](https://www.docker.com/) (for the database)
+- [Docker Desktop](https://www.docker.com/)
 
-### Setup
+#### Steps
 
 ```bash
 # 1. Clone the repository
@@ -95,26 +114,22 @@ cd ship
 # 2. Install dependencies
 pnpm install
 
-# 3. Configure environment
-cp api/.env.example api/.env.local
-cp web/.env.example web/.env
-
-# 4. Start the database
-docker-compose up -d
-
-# 5. Create sample data
-pnpm db:seed
-
-# 6. Run database migrations
-pnpm db:migrate
-
-# 7. Start the application
-pnpm dev
+# 3. Build and start everything (database, API, web)
+pnpm docker:up
 ```
 
-### Open the App
+That's it. `pnpm docker:up` handles the rest automatically:
 
-Once it's running, open your browser to:
+- Starts PostgreSQL on port **5433** (avoids conflicts with any existing PostgreSQL on 5432)
+- Builds and starts the API and web containers
+- Runs all database migrations
+- Seeds the database with sample data
+
+> **Note:** The first run downloads Docker images and installs dependencies inside containers, which takes a few minutes. Subsequent starts are fast.
+
+#### Open the App
+
+Once you see `VITE ready` in the output, open your browser to:
 
 **http://localhost:5173**
 
@@ -122,7 +137,7 @@ Log in with the demo account:
 - **Email:** `dev@ship.local`
 - **Password:** `admin123`
 
-### What's Running
+#### What's Running
 
 | Service | URL | Description |
 |---------|-----|-------------|
@@ -130,17 +145,73 @@ Log in with the demo account:
 | API server | http://localhost:3000 | Backend services |
 | Swagger UI | http://localhost:3000/api/docs | Interactive API documentation |
 | OpenAPI spec | http://localhost:3000/api/openapi.json | OpenAPI 3.0 specification |
-| PostgreSQL | localhost:5432 | Database (via Docker) |
+| PostgreSQL | localhost:5433 | Database (Docker, port 5433) |
 
-### Common Commands
+#### Common Commands (Docker)
 
 ```bash
-pnpm dev          # Start everything
+pnpm docker:up      # Build and start all services
+pnpm docker:down    # Stop all services
+pnpm docker:clean   # Stop and delete volumes (resets database to fresh state)
+```
+
+---
+
+### Setup: Native PostgreSQL
+
+Use this path if you have PostgreSQL installed locally and prefer to run the API and web servers as native Node.js processes.
+
+#### Prerequisites
+
+- [Node.js](https://nodejs.org/) 20 or newer
+- [pnpm](https://pnpm.io/) (`npm install -g pnpm`)
+- PostgreSQL 14 or newer, running locally
+
+#### Steps
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/US-Department-of-the-Treasury/ship.git
+cd ship
+
+# 2. Install dependencies
+pnpm install
+
+# 3. Start the application
+#    pnpm dev auto-creates api/.env.local, creates the database,
+#    runs migrations, and seeds on first run — no manual setup needed
+pnpm dev
+```
+
+> **Manual environment setup (optional):** Copy `api/.env.example` to `api/.env.local` and set `DATABASE_URL` to your local PostgreSQL connection string. Then run `pnpm db:migrate` followed by `pnpm db:seed` to set up the schema and sample data manually.
+
+#### Open the App
+
+**http://localhost:5173**
+
+Log in with the demo account:
+- **Email:** `dev@ship.local`
+- **Password:** `admin123`
+
+#### What's Running
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Web app | http://localhost:5173 | The Ship interface |
+| API server | http://localhost:3000 | Backend services |
+| Swagger UI | http://localhost:3000/api/docs | Interactive API documentation |
+| OpenAPI spec | http://localhost:3000/api/openapi.json | OpenAPI 3.0 specification |
+| PostgreSQL | localhost:5432 | Your local PostgreSQL instance |
+
+#### Common Commands (Native)
+
+```bash
+pnpm dev          # Start API and web servers
 pnpm dev:web      # Start just the web app
 pnpm dev:api      # Start just the API
-pnpm db:seed      # Reset database with sample data
 pnpm db:migrate   # Run database migrations
-pnpm test         # Run tests
+pnpm db:seed      # Reset database with sample data
+pnpm test         # Run unit tests (Vitest)
 ```
 
 ---
@@ -202,39 +273,32 @@ ship/
 ## Testing
 
 ```bash
-# Run all E2E tests
+# Run unit tests (Vitest)
 pnpm test
 
-# Run tests with UI
-pnpm test:ui
+# Run E2E tests (Playwright)
+pnpm test:e2e
 
-# Run specific test file
-pnpm test e2e/documents.spec.ts
+# Run specific E2E test file
+pnpm test:e2e e2e/documents.spec.ts
 ```
 
-Ship uses Playwright for end-to-end testing with 73+ tests covering all major functionality.
+Ship uses Vitest for unit tests and Playwright for end-to-end testing with 73+ tests covering all major functionality.
 
 ---
 
 ## Deployment
 
-Ship supports multiple deployment patterns:
+| Environment | Infrastructure |
+|-------------|---------------|
+| **Development** | Docker Compose (`pnpm docker:up`) or native PostgreSQL (`pnpm dev`) |
+| **Production** | AWS Elastic Beanstalk (API) + S3/CloudFront (frontend) |
 
-| Environment | Recommended Approach |
-|-------------|---------------------|
-| **Development** | Local with Docker Compose |
-| **Staging** | AWS Elastic Beanstalk |
-| **Production** | AWS GovCloud with Terraform |
-
-### Docker
+### Deploy to Production
 
 ```bash
-# Build production images
-docker build -t ship-api ./api
-docker build -t ship-web ./web
-
-# Run with Docker Compose
-docker-compose -f docker-compose.prod.yml up
+./scripts/deploy.sh prod           # Backend → Elastic Beanstalk
+./scripts/deploy-frontend.sh prod  # Frontend → S3/CloudFront
 ```
 
 ### Environment Variables

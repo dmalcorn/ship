@@ -102,12 +102,12 @@ development_status:
   epic-7-retrospective: optional
 
   # ─── Epic 8: Submission Package ──────────────────────────────────────────────
-  epic-8: backlog
-  8-1-write-discovery-write-up: backlog
-  8-2-update-readme-setup-guide: backlog
-  8-3-verify-codebase-orientation-checklist: backlog
-  8-4-deploy-improved-fork-to-aws: backlog
-  8-5-record-demo-video: backlog
-  8-6-complete-ai-cost-analysis: backlog
-  8-7-publish-social-post: backlog
+  epic-8: in-progress
+  8-1-write-discovery-write-up: ready-for-dev
+  8-2-update-readme-setup-guide: ready-for-dev
+  8-3-verify-codebase-orientation-checklist: ready-for-dev
+  8-4-deploy-improved-fork-to-aws: ready-for-dev
+  8-5-record-demo-video: ready-for-dev
+  8-6-complete-ai-cost-analysis: ready-for-dev
+  8-7-publish-social-post: ready-for-dev
   epic-8-retrospective: optional
