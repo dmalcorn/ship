@@ -8,7 +8,13 @@
   "forwardPorts": [3000, 5173],
   "portsAttributes": {
     "3000": { "label": "API Server", "onAutoForward": "notify" },
-    "5173": { "label": "Web Dev Server", "onAutoForward": "openBrowser" }
+    "5173": { "label": "Web Dev Server", "onAutoForward": "openBrowser" },
+    "*": { "onAutoForward": "silent" }
+  },
+
+  // Override host-derived paths so Windows host paths don't leak into the container
+  "remoteEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/node/.claude"
   },
 
   // Set up pnpm, install deps, migrate, and seed after container creation
