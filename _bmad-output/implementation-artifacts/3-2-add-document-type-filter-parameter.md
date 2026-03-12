@@ -1,6 +1,6 @@
 # Story 3.2: Add Document Type Filter Parameter
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -28,33 +28,33 @@ So that the sidebar can fetch only the document types it needs instead of downlo
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Verify current state of type filter in documents route (AC: #1, #3)
-  - [ ] Read `api/src/routes/documents.ts` `GET /` handler (the list endpoint, around line 104)
-  - [ ] Confirm `?type=` filter exists and is applied using parameterized SQL (`$N` placeholder, no string interpolation)
-  - [ ] If already correct: document it as-is and note in commit that filter was already parameterized — story verified
-  - [ ] If filter uses string interpolation or client-side filtering: fix it to use `AND document_type = $${params.length + 1}` with `params.push(type)`
+- [x] Task 1: Verify current state of type filter in documents route (AC: #1, #3)
+  - [x] Read `api/src/routes/documents.ts` `GET /` handler (the list endpoint, around line 104)
+  - [x] Confirm `?type=` filter exists and is applied using parameterized SQL (`$N` placeholder, no string interpolation)
+  - [x] If already correct: document it as-is and note in commit that filter was already parameterized — story verified
+  - [x] If filter uses string interpolation or client-side filtering: fix it to use `AND document_type = $${params.length + 1}` with `params.push(type)`
 
-- [ ] Task 2: Harden with input validation (AC: #1, #3)
-  - [ ] Check whether the `type` param is validated against the known enum of document types before being passed to SQL
-  - [ ] If not validated: add a guard that rejects unknown type values with HTTP 400 or silently ignores them
-  - [ ] Valid values: `'wiki' | 'issue' | 'program' | 'project' | 'sprint' | 'person' | 'weekly_plan' | 'weekly_retro'`
-  - [ ] This prevents potential SQL injection vector from unvalidated query param (even with parameterized queries, type hygiene is good practice)
+- [x] Task 2: Harden with input validation (AC: #1, #3)
+  - [x] Check whether the `type` param is validated against the known enum of document types before being passed to SQL
+  - [x] If not validated: add a guard that rejects unknown type values with HTTP 400 or silently ignores them
+  - [x] Valid values: `'wiki' | 'issue' | 'program' | 'project' | 'sprint' | 'person' | 'weekly_plan' | 'weekly_retro'`
+  - [x] This prevents potential SQL injection vector from unvalidated query param (even with parameterized queries, type hygiene is good practice)
 
-- [ ] Task 3: Verify frontend already uses the filter (AC: #1)
-  - [ ] Check `web/src/hooks/useDocumentsQuery.ts` `fetchDocuments()` function
-  - [ ] Confirm it calls `/api/documents?type=${type}` — if it does, the frontend is already passing the filter
-  - [ ] Note: `useDocumentsQuery('wiki')` already passes `?type=wiki` (line 29 of useDocumentsQuery.ts)
+- [x] Task 3: Verify frontend already uses the filter (AC: #1)
+  - [x] Check `web/src/hooks/useDocumentsQuery.ts` `fetchDocuments()` function
+  - [x] Confirm it calls `/api/documents?type=${type}` — if it does, the frontend is already passing the filter
+  - [x] Note: `useDocumentsQuery('wiki')` already passes `?type=wiki` (line 29 of useDocumentsQuery.ts)
 
-- [ ] Task 4: Smoke test the filter (AC: #1, #2)
-  - [ ] Start API and authenticate
-  - [ ] `curl ... http://127.0.0.1:3000/api/documents?type=wiki | jq 'length'` — should return only wiki count
-  - [ ] `curl ... http://127.0.0.1:3000/api/documents?type=issue | jq 'length'` — should return only issue count
-  - [ ] `curl ... http://127.0.0.1:3000/api/documents | jq 'length'` — should return all documents
-  - [ ] Compare type=wiki payload size vs unfiltered — document savings
+- [x] Task 4: Smoke test the filter (AC: #1, #2)
+  - [x] Start API and authenticate
+  - [x] `curl ... http://127.0.0.1:3000/api/documents?type=wiki | jq 'length'` — should return only wiki count
+  - [x] `curl ... http://127.0.0.1:3000/api/documents?type=issue | jq 'length'` — should return only issue count
+  - [x] `curl ... http://127.0.0.1:3000/api/documents | jq 'length'` — should return all documents
+  - [x] Compare type=wiki payload size vs unfiltered — document savings
 
-- [ ] Task 5: Run unit tests (AC: #4)
-  - [ ] `cd /workspace && pnpm test`
-  - [ ] Confirm only the 6 pre-existing `auth.test.ts` failures remain
+- [x] Task 5: Run unit tests (AC: #4)
+  - [x] `cd /workspace && pnpm test`
+  - [x] Confirm only the 6 pre-existing `auth.test.ts` failures remain
 
 ## Dev Notes
 
@@ -128,16 +128,21 @@ fix(api): validate type param and confirm SQL-level filtering on documents endpo
 
 ### Agent Model Used
 
-_to be filled in by dev agent_
+claude-sonnet-4-6
 
 ### Debug Log References
 
-_to be filled in by dev agent_
+- Confirmed existing filter used parameterized SQL: `AND document_type = $${params.length + 1}` at line 126
+- Type validation guard was absent — added `VALID_DOC_TYPES` check returning HTTP 400 for unknown types
+- Frontend `fetchDocuments` already used `?type=${type}` — confirmed at line 29 of `useDocumentsQuery.ts`
+- Tests: 445 passed, 6 failed (all pre-existing `auth.test.ts` rate-limit failures)
 
 ### Completion Notes List
 
-_to be filled in by dev agent_
+- Filter was already correctly parameterized — no SQL change needed
+- Added `VALID_DOC_TYPES` const and guard check at top of `GET /` handler in `documents.ts`
+- Unknown type values now return `400 { error: 'Invalid document type' }`
 
 ### File List
 
-- `api/src/routes/documents.ts` (modified — add type validation guard; confirm parameterized filter)
+- `api/src/routes/documents.ts` (modified — added type validation guard; parameterized filter confirmed)
