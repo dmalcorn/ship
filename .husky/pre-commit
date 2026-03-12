@@ -9,7 +9,7 @@ if [ -f "./scripts/check-api-coverage.sh" ]; then
 fi
 
 # Open source compliance checks (secrets scan + AI analysis)
-if command -v comply &> /dev/null; then
+if command -v comply >/dev/null 2>&1; then
   # NOTE: --skip-trivy is temporary workaround for compliance-toolkit bug
   # https://github.com/US-Department-of-the-Treasury/compliance-toolkit/issues/XXX
   # Remove --skip-trivy once the ImportError in sbom module is fixed

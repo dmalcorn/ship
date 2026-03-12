@@ -6,6 +6,9 @@ set -e
 
 WORKSPACE="/workspace"
 
+# Fix ownership on named volumes (Docker creates them as root; container user is node)
+sudo chown -R node:node /home/node/.claude 2>/dev/null || true
+
 echo "=== Ship Dev Container Setup ==="
 
 # Disable SSL strict mode (government VPN environments)

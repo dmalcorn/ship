@@ -10,6 +10,16 @@ import { loadContentFromYjsState } from '../utils/yjsConverter.js';
 type RouterType = ReturnType<typeof Router>;
 const router: RouterType = Router();
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requireValidUUID(id: string, res: Response): boolean {
+  if (!UUID_RE.test(id)) {
+    res.status(400).json({ error: 'Invalid document ID format' });
+    return false;
+  }
+  return true;
+}
+
 // Check if user can access a document (visibility check)
 async function canAccessDocument(
   docId: string,
@@ -219,6 +229,7 @@ router.get('/converted/list', authMiddleware, async (req: Request, res: Response
 
 // Get single document
 router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
+  if (!requireValidUUID(String(req.params.id), res)) return;
   try {
     const id = String(req.params.id);
     const userId = String(req.userId);
@@ -371,6 +382,7 @@ router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
 // This endpoint converts Yjs state to TipTap JSON if content is null
 // Useful for API-based document editing without using the collaborative editor
 router.get('/:id/content', authMiddleware, async (req: Request, res: Response) => {
+  if (!requireValidUUID(String(req.params.id), res)) return;
   try {
     const id = String(req.params.id);
     const userId = String(req.userId);
@@ -426,6 +438,7 @@ router.get('/:id/content', authMiddleware, async (req: Request, res: Response) =
 // This endpoint updates content and clears yjs_state (forcing regeneration)
 // Useful for API-based document editing without using the collaborative editor
 router.patch('/:id/content', authMiddleware, async (req: Request, res: Response) => {
+  if (!requireValidUUID(String(req.params.id), res)) return;
   try {
     const id = String(req.params.id);
     const userId = String(req.userId);
@@ -592,6 +605,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
 
 // Update document
 router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
+  if (!requireValidUUID(String(req.params.id), res)) return;
   const client = await pool.connect();
   try {
     const id = String(req.params.id);
@@ -1100,6 +1114,7 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
 
 // Delete document
 router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
+  if (!requireValidUUID(String(req.params.id), res)) return;
   try {
     const id = String(req.params.id);
     const userId = String(req.userId);
@@ -1142,6 +1157,7 @@ const convertDocumentSchema = z.object({
 });
 
 router.post('/:id/convert', authMiddleware, async (req: Request, res: Response) => {
+  if (!requireValidUUID(String(req.params.id), res)) return;
   const client = await pool.connect();
   try {
     const id = String(req.params.id);
@@ -1344,6 +1360,7 @@ router.post('/:id/convert', authMiddleware, async (req: Request, res: Response) 
 
 // POST /documents/:id/undo-conversion - Undo a document conversion using snapshots
 router.post('/:id/undo-conversion', authMiddleware, async (req: Request, res: Response) => {
+  if (!requireValidUUID(String(req.params.id), res)) return;
   const id = String(req.params.id);
   const userId = String(req.userId);
   const workspaceId = String(req.workspaceId);
