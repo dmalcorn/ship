@@ -1,0 +1,42 @@
+#!/bin/sh
+# post-checkout: ensure branch-agnostic files are always present.
+#
+# These directories should be available on every branch regardless of when
+# the branch was created. They are restored from master if missing.
+#
+# Fires on:  git checkout, git switch, git worktree add
+# Args:      $1=prev HEAD, $2=new HEAD, $3=1(branch) or 0(file)
+
+BRANCH_CHECKOUT=$3
+
+# Only run on branch checkouts, not file-level checkouts
+if [ "$BRANCH_CHECKOUT" != "1" ]; then
+  exit 0
+fi
+
+RESTORED=""
+
+restore_from_master() {
+  local path="$1"
+  if ! git ls-files --error-unmatch "$path" > /dev/null 2>&1; then
+    # Path is not tracked on this branch — restore from master
+    if git show "master:$path" > /dev/null 2>&1; then
+      git checkout master -- "$path" 2>/dev/null
+      RESTORED="$RESTORED $path"
+    fi
+  fi
+}
+
+# Check sentinel files to detect missing directories
+restore_from_master .devcontainer/devcontainer.json
+restore_from_master _bmad-output/planning-artifacts/epics.md
+restore_from_master _bmad-output/test-artifacts/automation-summary.md
+
+if [ -n "$RESTORED" ]; then
+  echo ""
+  echo "post-checkout: restored branch-agnostic files from master:"
+  for f in $RESTORED; do
+    echo "  $f"
+  done
+  echo ""
+fi
