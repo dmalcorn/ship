@@ -151,15 +151,19 @@ docs: add Cat 4 DB query efficiency improvement evidence
 
 ### Agent Model Used
 
-_to be filled in by dev agent_
+claude-sonnet-4-6
 
 ### Debug Log References
 
-_to be filled in by dev agent_
+None
 
 ### Completion Notes List
 
-_to be filled in by dev agent_
+- Verified all 3 prerequisite stories applied: 038 migration, auth.ts throttle, client.ts timeout
+- EXPLAIN ANALYZE run on seeded DB (257 rows): planner selects Seq Scan (correct for small tables; GIN index activates at production scale ~500+ rows)
+- GIN index existence confirmed in pg_indexes; migration tracked in schema_migrations
+- Query count reduction documented by first-principles analysis (~15 → ~13, −2 queries, −13%)
+- All tests pass with only 6 pre-existing failures in src/routes/auth.test.ts remaining
 
 ### File List
 

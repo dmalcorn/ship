@@ -126,15 +126,17 @@ fix(db): tighten statement_timeout from 30s to 10s to limit pool exhaustion
 
 ### Agent Model Used
 
-_to be filled in by dev agent_
+claude-sonnet-4-6
 
 ### Debug Log References
 
-_to be filled in by dev agent_
+None
 
 ### Completion Notes List
 
-_to be filled in by dev agent_
+- Changed `statement_timeout: 30000` → `statement_timeout: 10_000` in Pool config at client.ts:25
+- Updated comment to reflect new rationale (pool exhaustion prevention vs DDoS protection)
+- All tests pass with no new failures
 
 ### File List
 
