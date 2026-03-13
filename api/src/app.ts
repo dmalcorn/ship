@@ -117,7 +117,7 @@ export function createApp(corsOrigin: string = 'http://localhost:5173'): express
         scriptSrc: ["'self'", "'unsafe-inline'"], // Admin credentials page uses inline scripts
         styleSrc: ["'self'", "'unsafe-inline'"], // TipTap editor needs inline styles
         imgSrc: ["'self'", "data:", "blob:", "https:"],
-        connectSrc: ["'self'", "wss:", "ws:"], // WebSocket connections
+        connectSrc: ["'self'", "wss:", "ws:", ...(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : [])], // WebSocket + cross-origin API
         fontSrc: ["'self'", "data:"],
         objectSrc: ["'none'"],
         frameSrc: ["'none'"],
@@ -151,7 +151,8 @@ export function createApp(corsOrigin: string = 'http://localhost:5173'): express
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      // 'none' required for cross-origin requests (frontend and API on different domains)
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
       maxAge: 15 * 60 * 1000, // 15 minutes
     },
   }));
