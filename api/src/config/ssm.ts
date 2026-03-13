@@ -40,6 +40,12 @@ export async function loadProductionSecrets(): Promise<void> {
     return; // Use .env files for local dev
   }
 
+  // If critical secrets are already in env (e.g. Railway), skip SSM entirely
+  if (process.env.DATABASE_URL && process.env.SESSION_SECRET) {
+    console.log('Secrets already present in environment, skipping SSM');
+    return;
+  }
+
   const environment = process.env.ENVIRONMENT || 'prod';
   const basePath = `/ship/${environment}`;
 
