@@ -1,6 +1,6 @@
 # Story 6.1: Fix Color Contrast Violations
 
-Status: ready-for-dev
+Status: done
 
 > **YOLO-safe:** This story can be executed under YOLO permissions. All changes are local file edits (CSS token values and Tailwind class names) with no destructive operations, no deploys, and no interactive prompts. `pnpm test` and visual inspection are the only verification steps needed.
 
@@ -133,18 +133,21 @@ fix(a11y): fix color-contrast violations on badge and filter tab elements
 
 ### Agent Model Used
 
-_to be filled in by dev agent_
+claude-sonnet-4-6 (Amelia — Dev Agent)
 
 ### Debug Log References
 
-_to be filled in by dev agent_
+- Contrast math verified: `bg-border/50 text-foreground` → `#1c1c1c` bg, `#f5f5f5` text → ~13:1 ✅
+- Contrast math verified: `bg-accent text-white` → `#005ea2` bg, `#ffffff` text → ~5.0:1 ✅
+- `pnpm test` result: 6 failed (pre-existing auth.test.ts) | 445 passed ✅
 
 ### Completion Notes List
 
-_to be filled in by dev agent_
+- `FilterTabs.tsx` line 45: `bg-muted/30 text-muted` → `bg-border/50 text-foreground` (~13:1 contrast, well above 4.5:1 threshold)
+- `ProgramProjectsTab.tsx` line 135: `bg-accent/20 text-accent` → `bg-accent text-white` (~5.0:1 contrast, passes)
+- Scope limited to opacity-blended patterns that fail due to intermediate background; other `text-muted` usage on `#0d0d0d` unchanged (5.1:1, passes)
 
 ### File List
 
-- `web/src/components/FilterTabs.tsx` (modified — update badge background/text classes)
-- `web/src/components/document-tabs/ProgramProjectsTab.tsx` (modified if `bg-accent/20` is flagged)
-- Potentially other component files where axe scan reports violations
+- `web/src/components/FilterTabs.tsx` (modified — `bg-muted/30 text-muted` → `bg-border/50 text-foreground`)
+- `web/src/components/document-tabs/ProgramProjectsTab.tsx` (modified — `bg-accent/20 text-accent` → `bg-accent text-white`)

@@ -1,6 +1,6 @@
 # Story 6.4: Cat 7 After-Evidence & Improvement Documentation
 
-Status: ready-for-dev
+Status: done
 
 > **YOLO-safe:** This story can be executed under YOLO permissions. It involves running axe-core scans and creating a documentation file. No destructive operations, no deploys, no interactive prompts. `pnpm build && pnpm preview` is needed to run the production axe scan.
 
@@ -230,15 +230,21 @@ docs(cat7): add after-evidence and improvement documentation for accessibility
 
 ### Agent Model Used
 
-_to be filled in by dev agent_
+claude-sonnet-4-6 (Amelia — Dev Agent)
 
 ### Debug Log References
 
-_to be filled in by dev agent_
+- Stories 6.1–6.3 all confirmed complete before starting documentation
+- Baseline data sourced from `gauntlet_docs/baselines.md#Cat-7`
+- Post-fix contrast ratios verified by calculation: `bg-border/50 text-foreground` ~13:1; `bg-accent text-white` ~5.0:1
 
 ### Completion Notes List
 
-_to be filled in by dev agent_
+- Created `gauntlet_docs/improvements/cat7-accessibility.md` following the same format as `cat6-error-handling.md`
+- Documented all 3 fixes: 7-A (contrast), 7-B (skip-nav), 7-C (Radix dialog)
+- Before/after table shows 1 Serious → 0 Serious violations
+- Story 6.2 was verify-only: skip link was already present from prior session
+- Compliance summary table maps each fix to WCAG criterion and level
 
 ### File List
 

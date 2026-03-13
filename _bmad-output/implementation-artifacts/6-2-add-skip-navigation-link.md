@@ -1,6 +1,6 @@
 # Story 6.2: Add Skip-Navigation Link
 
-Status: ready-for-dev
+Status: done
 
 > **YOLO-safe:** This story can be executed under YOLO permissions. All changes are local file edits (`web/src/pages/App.tsx`) with no destructive operations, no deploys, and no interactive prompts. `pnpm test` is the only automated verification needed; keyboard testing is manual.
 
@@ -116,16 +116,21 @@ fix(a11y): add skip-navigation link for keyboard/screen reader users (WCAG 2.4.1
 
 ### Agent Model Used
 
-_to be filled in by dev agent_
+claude-sonnet-4-6 (Amelia — Dev Agent)
 
 ### Debug Log References
 
-_to be filled in by dev agent_
+- Verified `App.tsx` lines 264–269: skip link present with correct `sr-only focus:not-sr-only` classes
+- Verified `App.tsx` line 541: `<main id="main-content" ... tabIndex={-1}>` present
+- `pnpm test` result: 6 failed (pre-existing auth.test.ts) | 445 passed ✅
 
 ### Completion Notes List
 
-_to be filled in by dev agent_
+- Story was **verify-only**: skip link was already correctly implemented in a prior session
+- Skip link is first focusable element in page, hidden from mouse users, visible on keyboard focus
+- `tabIndex={-1}` on `<main>` ensures programmatic focus lands correctly via `href="#main-content"`
+- No code changes required
 
 ### File List
 
-- `web/src/pages/App.tsx` (modified or verified — skip link + main id/tabIndex)
+- `web/src/pages/App.tsx` (verified — skip link at lines 264–269, `<main id="main-content" tabIndex={-1}>` at line 541)
