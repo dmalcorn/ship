@@ -85,7 +85,9 @@ async function seed() {
       console.log('✅ Workspace created');
     }
 
-    // Team members to seed (dev user + 10 fake users)
+    // Team members to seed (dev user + 10 base users + 10 extended users)
+    // Extended users match supplement-seed.sql to reproduce the exact 547-document
+    // baseline used during Cat 3/4 benchmarking.
     const teamMembers = [
       { email: 'dev@ship.local', name: 'Dev User' },
       { email: 'alice.chen@ship.local', name: 'Alice Chen' },
@@ -98,6 +100,17 @@ async function seed() {
       { email: 'henry.patel@ship.local', name: 'Henry Patel' },
       { email: 'iris.nguyen@ship.local', name: 'Iris Nguyen' },
       { email: 'jack.brown@ship.local', name: 'Jack Brown' },
+      // Extended users (from supplement-seed.sql)
+      { email: 'lisa.park@ship.local', name: 'Lisa Park' },
+      { email: 'maria.rodriguez@ship.local', name: 'Maria Rodriguez' },
+      { email: 'nathan.scott@ship.local', name: 'Nathan Scott' },
+      { email: 'oliver.brown@ship.local', name: 'Oliver Brown' },
+      { email: 'patricia.davis@ship.local', name: 'Patricia Davis' },
+      { email: 'quinn.taylor@ship.local', name: 'Quinn Taylor' },
+      { email: 'rachel.anderson@ship.local', name: 'Rachel Anderson' },
+      { email: 'samuel.wilson@ship.local', name: 'Samuel Wilson' },
+      { email: 'tanya.moore@ship.local', name: 'Tanya Moore' },
+      { email: 'uma.patel@ship.local', name: 'Uma Patel' },
     ];
 
     const passwordHash = await bcrypt.hash('admin123', 10);
@@ -809,9 +822,10 @@ async function seed() {
       console.log('ℹ️  All issues already exist');
     }
 
-    // Bulk-generate issues to reach realistic data volume (500+ total documents).
+    // Bulk-generate issues to reach realistic data volume matching the audit baseline.
     // Only runs if the issue count is below the target — idempotent on re-seed.
-    const BULK_ISSUE_TARGET = 400;
+    // Target 384 issues = exact count used during Cat 3/4 benchmarking (547 total docs).
+    const BULK_ISSUE_TARGET = 384;
     const currentIssueCount = await pool.query(
       `SELECT COUNT(*) FROM documents WHERE workspace_id = $1 AND document_type = 'issue'`,
       [workspaceId]
