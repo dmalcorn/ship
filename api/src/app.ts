@@ -151,8 +151,9 @@ export function createApp(corsOrigin: string = 'http://localhost:5173'): express
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      // 'none' required for cross-origin requests (frontend and API on different domains)
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+      // Railway: 'none' required (frontend and API on different domains)
+      // AWS: 'strict' (frontend served via CloudFront on same domain as API)
+      sameSite: process.env.RAILWAY_ENVIRONMENT ? 'none' : 'strict',
       maxAge: 15 * 60 * 1000, // 15 minutes
     },
   }));
