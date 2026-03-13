@@ -100,11 +100,10 @@ export default defineConfig(({ mode }) => {
               if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
                 return 'vendor-react';
               }
-              if (id.includes('/yjs/') || id.includes('y-indexeddb') || id.includes('y-websocket')) {
-                return 'vendor-yjs';
-              }
-              if (id.includes('@tiptap/pm') || id.includes('prosemirror')) {
-                return 'vendor-prosemirror';
+              if (id.includes('/yjs/') || id.includes('y-indexeddb') || id.includes('y-websocket') ||
+                  id.includes('@tiptap/pm') || id.includes('prosemirror')) {
+                // yjs and prosemirror are in the same chunk to avoid circular dependency TDZ crash
+                return 'vendor-collab';
               }
               if (id.includes('@tiptap/')) {
                 return 'vendor-tiptap';

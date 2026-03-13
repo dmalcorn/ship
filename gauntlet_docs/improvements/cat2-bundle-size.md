@@ -120,7 +120,7 @@ $ grep -r 'query-sync-storage-persister' web/src/
 
 **Why this approach is better:** Stable vendor chunks have content-addressed filenames that only change when their packages update. A typical app-code-only deploy means users skip ~472 KB gzip of vendor chunks entirely (served from browser cache). The entry chunk shrinks to 248 KB — only app-specific code.
 
-**Tradeoffs:** 4 additional HTTP requests on cold loads. Negligible under HTTP/2 multiplexing. One circular chunk advisory warning (`vendor-yjs → vendor-prosemirror → vendor-yjs`) — Rollup still produces a correct and functional build; this is a non-critical advisory about chunk deduplication order.
+**Tradeoffs:** 4 additional HTTP requests on cold loads. Negligible under HTTP/2 multiplexing. **⚠️ Post-merge correction:** A circular chunk warning (`vendor-yjs → vendor-prosemirror → vendor-yjs`) was emitted during the build and initially assessed as a non-critical advisory. This assessment was wrong — see **Post-Merge Regression** section below for the full diagnosis and fix.
 
 ---
 
@@ -148,3 +148,108 @@ grep -r 'query-sync-storage-persister' web/src/
 # dist/assets/vendor-tiptap-*.js  ~67 KB gzip
 # dist/assets/vendor-yjs-*.js     ~23 KB gzip
 ```
+
+---
+
+## Post-Merge Regression: Circular Chunk TDZ Crash
+
+> **Status:** Diagnosed and fixed on master (2026-03-13). The original `fix/bundle-size` branch contained this bug. It was caught during E2E test execution after the merge.
+
+### The Regression
+
+After the Cat 2 bundle-size merge landed on master, the production web app stopped working entirely. Symptoms:
+
+- **Browser**: Completely black page — no React app rendered, not even a loading spinner
+- **Railway deployment**: Login page unreachable; users saw a blank screen
+- **E2E test suite**: 0 passing tests (down from 836 baseline) — all tests failed at the login step with `#email` input never found
+
+### Diagnosis Path
+
+**Step 1 — Rule out infrastructure issues.** Initial hypothesis: Playwright's per-worker Vite preview server failing. Checked network bindings, proxy config, memory. None were root cause.
+
+**Step 2 — Screenshot evidence.** Playwright screenshots of failed tests showed a completely black page — not the "Loading..." state the Login component renders while checking setup status, but total black. This ruled out API/proxy issues entirely: if the app renders _at all_, you get at least the loading state.
+
+**Step 3 — Playwright trace analysis.** Extracted `.zip` trace files from `test-results/` and examined console logs. Found the crash:
+
+```
+ReferenceError: Cannot access 'v' before initialization
+    at vendor-yjs-BUMVmbSE.js:6:12453
+```
+
+This is a **Temporal Dead Zone (TDZ)** error — a JavaScript runtime error where a `const`/`let` variable is accessed before its binding is initialized. In browser bundles, TDZ errors of this form are a signature symptom of **Rollup circular chunk dependencies**.
+
+**Step 4 — Build log analysis.** Re-ran `pnpm build` and found a warning that had been present in the original Fix 2.4 build:
+
+```
+(!) Circular chunk: vendor-yjs -> vendor-prosemirror -> vendor-yjs
+```
+
+This warning was initially assessed as a "non-critical advisory about chunk deduplication order." That assessment was wrong.
+
+**Root cause confirmed:** Yjs (`yjs`, `y-indexeddb`, `y-websocket`) and ProseMirror (`prosemirror-*`, `@tiptap/pm`) have **mutual imports** at the module level. The Fix 2.4 `manualChunks` config split them into separate chunks (`vendor-yjs` and `vendor-prosemirror`). When Rollup emits two chunks that circularly reference each other, it cannot guarantee initialization order. At runtime, one chunk's module-level code executes before the other chunk's exports are initialized — producing the TDZ `Cannot access 'v' before initialization` crash. This happens synchronously during the very first script evaluation, before React's `createRoot()` is ever called. The entire app fails to mount.
+
+### The Fix
+
+**File:** `web/vite.config.ts`
+
+Merged the two circularly-dependent chunks into a single `vendor-collab` chunk, eliminating the cycle:
+
+```typescript
+// BEFORE (broken — creates circular chunk dependency):
+if (id.includes('/yjs/') || id.includes('y-indexeddb') || id.includes('y-websocket')) {
+  return 'vendor-yjs';
+}
+if (id.includes('@tiptap/pm') || id.includes('prosemirror')) {
+  return 'vendor-prosemirror';
+}
+
+// AFTER (fixed — yjs + prosemirror colocated to prevent TDZ):
+if (id.includes('/yjs/') || id.includes('y-indexeddb') || id.includes('y-websocket') ||
+    id.includes('@tiptap/pm') || id.includes('prosemirror')) {
+  // yjs and prosemirror are in the same chunk to avoid circular dependency TDZ crash
+  return 'vendor-collab';
+}
+```
+
+### Fixed Build Output
+
+```
+dist/assets/vendor-tiptap-*.js     193.41 kB │ gzip:  67.30 kB
+dist/assets/vendor-react-*.js    1,014.22 kB │ gzip: 288.63 kB
+dist/assets/vendor-collab-*.js     370.12 kB │ gzip: 115.40 kB
+dist/assets/index-*.js           1,244.15 kB │ gzip: 248.66 kB
+✓ built in 43.29s
+```
+
+The circular chunk warning is gone. `vendor-yjs` and `vendor-prosemirror` are replaced by the unified `vendor-collab` chunk (115.40 KB gzip — slightly smaller than the combined 116.55 KB of the two broken chunks, due to deduplication).
+
+**The index chunk size (248.66 KB gzip) is unchanged** — the bundle size improvements from Fixes 2.1–2.3 are fully preserved.
+
+### Verification
+
+After the fix:
+
+```bash
+# Confirm no circular chunk warning in build output
+cd web && pnpm build
+# Expected: no "(!) Circular chunk" warning
+
+# Run auth smoke tests
+# auth.spec.ts: 8/8 passed (was 0/8 with the broken build)
+```
+
+E2E `auth.spec.ts` went from 0/8 to 8/8 passes after the fix was applied and the app was rebuilt.
+
+### Impact
+
+| Area | Before Fix | After Fix |
+|---|---|---|
+| Browser load | Black page, TDZ crash | App mounts normally |
+| Railway login | Unreachable (blank screen) | Working |
+| E2E test suite | 0/836 passes | Full baseline restored |
+| Bundle size (index chunk) | N/A (app didn't load) | 248.66 KB gzip — unchanged |
+| `vendor-collab` chunk | N/A | 115.40 KB gzip (cached across deploys) |
+
+### Lesson Learned
+
+Rollup's circular chunk warning is **not advisory** — it indicates a condition that will produce a TDZ crash at runtime whenever the chunk initialization order is unfavorable. When `manualChunks` is used to split vendor libraries, libraries with mutual module-level imports **must be colocated in the same chunk**. The Yjs ↔ ProseMirror coupling is well-known (TipTap's ProseMirror integration `@tiptap/pm` re-exports ProseMirror modules, and Yjs's `y-prosemirror` binding imports both) — they should always be treated as a single deployment unit.
