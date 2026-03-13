@@ -809,6 +809,96 @@ async function seed() {
       console.log('ℹ️  All issues already exist');
     }
 
+    // Bulk-generate issues to reach realistic data volume (500+ total documents).
+    // Only runs if the issue count is below the target — idempotent on re-seed.
+    const BULK_ISSUE_TARGET = 400;
+    const currentIssueCount = await pool.query(
+      `SELECT COUNT(*) FROM documents WHERE workspace_id = $1 AND document_type = 'issue'`,
+      [workspaceId]
+    );
+    const existingIssueCount = parseInt(currentIssueCount.rows[0].count, 10);
+
+    if (existingIssueCount < BULK_ISSUE_TARGET) {
+      const bulkTitles = [
+        'Implement rate limiting on API endpoints',
+        'Add cursor-based pagination to documents list',
+        'Fix memory leak in WebSocket connection pool',
+        'Migrate from ILIKE to full-text search with tsvector',
+        'Add Redis caching layer for frequently accessed documents',
+        'Optimize Yjs state persistence to avoid full rewrites',
+        'Implement document archival bulk action',
+        'Add export to PDF functionality',
+        'Fix race condition in concurrent sprint creation',
+        'Implement soft-delete cleanup cron job',
+        'Add GraphQL schema alongside REST API',
+        'Fix issue with emoji picker on mobile viewports',
+        'Implement keyboard shortcut customization',
+        'Add document version history diff view',
+        'Fix broken backlink resolution after document rename',
+        'Implement workspace-level audit log viewer',
+        'Add dark mode support across all components',
+        'Fix TipTap table resize handle on Firefox',
+        'Implement inline comment threading',
+        'Add Slack notification integration for issue assignments',
+        'Fix session expiry not logging out all browser tabs',
+        'Implement drag-and-drop issue prioritization',
+        'Add two-factor authentication support',
+        'Fix accessibility violations in modal dialogs',
+        'Implement CSV export for issue lists',
+        'Add webhook support for external integrations',
+        'Fix slow query on documents list with large datasets',
+        'Implement bulk status update for issues',
+        'Add mention autocomplete in editor',
+        'Fix image upload size limit enforcement',
+        'Implement custom field types for issues',
+        'Add sprint velocity chart',
+        'Fix timezone handling in sprint dates',
+        'Implement issue template library',
+        'Add read receipts for documents',
+        'Fix duplicate notification on reassignment',
+        'Implement advanced search with filters',
+        'Add issue dependency tracking',
+        'Fix stale cache after workspace settings change',
+        'Implement role-based field visibility',
+        'Add burndown chart for active sprint',
+        'Fix editor cursor jump on collaborative edit',
+        'Implement automatic sprint rollover',
+        'Add document locking for in-progress reviews',
+        'Fix missing index on document_associations',
+        'Implement guest access for public documents',
+        'Add activity feed per document',
+      ];
+      const bulkStatuses = ['todo', 'in_progress', 'done', 'backlog'];
+      const bulkPriorities = ['low', 'medium', 'high', 'critical'];
+      const allProjectIds = projects.map(p => p.id);
+      const createdById = allUsers[0]?.id;
+
+      const toCreate = BULK_ISSUE_TARGET - existingIssueCount;
+      let bulkCreated = 0;
+      for (let i = 0; i < toCreate; i++) {
+        const title = bulkTitles[i % bulkTitles.length]!;
+        const status = bulkStatuses[i % bulkStatuses.length]!;
+        const priority = bulkPriorities[i % bulkPriorities.length]!;
+        const projectId = allProjectIds.length > 0 ? allProjectIds[i % allProjectIds.length] : null;
+
+        const result = await pool.query(
+          `INSERT INTO documents (workspace_id, document_type, title, properties, created_by)
+           VALUES ($1, 'issue', $2, $3, $4) RETURNING id`,
+          [workspaceId, title, JSON.stringify({ status, priority }), createdById]
+        );
+        const issueId = result.rows[0].id;
+        if (projectId) {
+          await pool.query(
+            `INSERT INTO document_associations (document_id, related_id, relationship_type)
+             VALUES ($1, $2, 'project') ON CONFLICT DO NOTHING`,
+            [issueId, projectId]
+          );
+        }
+        bulkCreated++;
+      }
+      console.log(`✅ Bulk-generated ${bulkCreated} additional issues (total target: ${BULK_ISSUE_TARGET})`);
+    }
+
     // Create welcome/tutorial wiki document
     const existingTutorial = await pool.query(
       'SELECT id FROM documents WHERE workspace_id = $1 AND document_type = $2 AND title = $3',
