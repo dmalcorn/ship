@@ -420,4 +420,35 @@ test.describe('Mentions', () => {
       await page2.close();
     }
   });
+
+  test('mention search returns documents matching partial title', async ({ page }) => {
+    // Risk mitigated: ILIKE search had no index at baseline; regressions here could silently
+    // return wrong results after a schema change. This test pins the search contract.
+
+    // Create a document with a unique, known title via API to ensure it exists
+    const csrfRes = await page.request.get('/api/csrf-token')
+    const { token: csrfToken } = await csrfRes.json()
+    const uniqueTitle = `MentionSearchTarget-${Date.now()}`
+    await page.request.post('/api/documents', {
+      data: { title: uniqueTitle, document_type: 'wiki' },
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+    })
+
+    // Navigate to a new document to type @ in its editor
+    await createNewDocument(page)
+
+    const editor = page.locator('.ProseMirror')
+    await editor.click()
+
+    // Type @ followed by a unique prefix to trigger mention search
+    const partialTitle = 'MentionSearch' // unique prefix of the created document's title
+    await page.keyboard.type(`@${partialTitle}`)
+
+    // Mention popup should appear with the target document
+    const mentionPopup = page.locator('[role="listbox"]')
+    await expect(mentionPopup).toBeVisible({ timeout: 5000 })
+
+    // The created document should appear in the results
+    await expect(mentionPopup).toContainText(uniqueTitle, { timeout: 5000 })
+  });
 });

@@ -155,13 +155,17 @@ commentsRouter.patch('/:id', authMiddleware, async (req: Request, res: Response)
       [commentId, workspaceId]
     );
 
-    // Content edits require author ownership; resolving is allowed by any workspace member
-    if (parsed.data.content !== undefined && existing.rows[0]?.author_id !== userId) {
-      res.status(403).json({ error: 'Only the comment author can edit content' });
-      return;
-    }
+    // Existence check must come before the ownership check — otherwise a missing
+    // comment causes the optional-chain (existing.rows[0]?.author_id) to resolve
+    // to undefined, which !== userId, and the caller receives 403 instead of 404.
     if (existing.rows.length === 0) {
       res.status(404).json({ error: 'Comment not found' });
+      return;
+    }
+
+    // Content edits require author ownership; resolving is allowed by any workspace member
+    if (parsed.data.content !== undefined && existing.rows[0].author_id !== userId) {
+      res.status(403).json({ error: 'Only the comment author can edit content' });
       return;
     }
 

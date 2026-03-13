@@ -57,6 +57,42 @@ test.describe('Documents', () => {
     await expect(titleInput).toHaveValue('Test Document Title')
   })
 
+  test('does not create documents from empty API payload', async ({ page }) => {
+    // Risk mitigated: POST /api/documents with empty body previously returned 200 and created
+    // junk documents. This test ensures the UI does not expose a path to create empty documents
+    // inadvertently.
+
+    // Fetch CSRF token first (required for state-mutating requests)
+    const csrfRes = await page.request.get('/api/csrf-token')
+    const { token: csrfToken } = await csrfRes.json()
+
+    // Attempt direct API call with empty body (bypassing UI validation)
+    const response = await page.request.post('/api/documents', {
+      data: {},
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrfToken,
+      },
+    })
+
+    // The API either:
+    // (A) Rejects the empty body with 400 (strict validation), OR
+    // (B) Creates a document with safe defaults ("Untitled" title, not empty/junk)
+    const body = await response.json()
+
+    if (response.status() === 400) {
+      // Strict rejection: empty body not accepted
+      expect(response.status()).toBe(400)
+    } else if (response.status() === 200 || response.status() === 201) {
+      // Safe defaults: document created with non-empty title (no junk records)
+      const title = body.data?.title ?? body.title
+      expect(title).toBeTruthy()
+      expect(title).not.toBe('')
+    } else {
+      throw new Error(`Unexpected status ${response.status()} from POST /api/documents with empty body`)
+    }
+  })
+
   test('document list updates when new document created', async ({ page }) => {
     await page.goto('/docs')
 

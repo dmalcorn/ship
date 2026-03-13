@@ -10,6 +10,7 @@ import {
   useCallback,
 } from 'react';
 import { cn } from '@/lib/cn';
+import { triggerFileUpload } from './FileAttachment';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -143,8 +144,13 @@ interface CreateSlashCommandsOptions {
   onNavigateToDocument?: (id: string) => void;
   /** Document type for filtering document-specific commands */
   documentType?: string;
-  /** AbortSignal for cancelling async operations on navigation/cleanup */
-  abortSignal?: AbortSignal;
+  /**
+   * Returns the *current* AbortSignal for cancelling async operations on navigation/cleanup.
+   * A getter function (not a static value) so that commands always read the live signal at
+   * execution time — avoiding the stale-signal bug where useMemo captures the signal before
+   * useEffect cleanup aborts and replaces the AbortController.
+   */
+  getAbortSignal?: () => AbortSignal | undefined;
 }
 
 // Icons for slash commands
@@ -255,7 +261,7 @@ const icons = {
   ),
 };
 
-export function createSlashCommands({ onCreateSubDocument, onNavigateToDocument, documentType, abortSignal }: CreateSlashCommandsOptions) {
+export function createSlashCommands({ onCreateSubDocument, onNavigateToDocument, documentType, getAbortSignal }: CreateSlashCommandsOptions) {
   const slashCommands: SlashCommandItem[] = [
     // Sub-document (requires async callback)
     {
@@ -380,7 +386,8 @@ export function createSlashCommands({ onCreateSubDocument, onNavigateToDocument,
           const reader = new FileReader();
           reader.onload = async () => {
             // Check if aborted before processing
-            if (abortSignal?.aborted) return;
+            const abortSignalAtReadTime = getAbortSignal?.();
+            if (abortSignalAtReadTime?.aborted) return;
 
             const dataUrl = reader.result as string;
 
@@ -389,10 +396,10 @@ export function createSlashCommands({ onCreateSubDocument, onNavigateToDocument,
 
             try {
               // Upload and replace with CDN URL
-              const result = await uploadFile(file, undefined, abortSignal);
+              const result = await uploadFile(file, undefined, abortSignalAtReadTime);
 
               // Check if aborted before updating editor
-              if (abortSignal?.aborted) {
+              if (abortSignalAtReadTime?.aborted) {
                 console.log('Slash command image upload completed but was cancelled - not updating editor');
                 return;
               }
@@ -439,11 +446,12 @@ export function createSlashCommands({ onCreateSubDocument, onNavigateToDocument,
       description: 'Upload a file attachment',
       aliases: ['file', 'attachment', 'attach', 'pdf', 'doc', 'document'],
       icon: icons.file,
-      command: async ({ editor, range }) => {
+      command: ({ editor, range }) => {
         editor.chain().focus().deleteRange(range).run();
-        // Import and trigger file upload
-        const { triggerFileUpload } = await import('./FileAttachment');
-        triggerFileUpload(editor, abortSignal);
+        // Call synchronously (no async/await) to preserve the browser's
+        // user-gesture context required to open the native file picker.
+        // Read the current signal via the getter to avoid the stale-signal bug.
+        triggerFileUpload(editor, getAbortSignal?.());
       },
     },
     // Toggle/Details

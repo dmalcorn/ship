@@ -1,6 +1,6 @@
 # Story 1.1: Capture All 7 Category Baselines
 
-Status: review
+Status: done
 
 ## Story
 

@@ -331,10 +331,9 @@ async function handleFileUpload(editor: any, file: File, signal?: AbortSignal) {
  * @param signal - Optional AbortSignal for cancelling uploads on navigation/cleanup
  */
 export function triggerFileUpload(editor: any, signal?: AbortSignal) {
-  // Check if already aborted
-  if (signal?.aborted) {
-    return;
-  }
+  // Note: do NOT guard on signal?.aborted here. The caller resolves the signal via a getter
+  // at execution time, so it should always be current. An early abort check would silently
+  // swallow the upload when a stale (already-aborted) signal is accidentally passed.
 
   const input = document.createElement('input');
   input.type = 'file';
@@ -344,14 +343,28 @@ export function triggerFileUpload(editor: any, signal?: AbortSignal) {
   input.onchange = async () => {
     // Check if aborted while file picker was open
     if (signal?.aborted) {
+      document.body.removeChild(input);
       return;
     }
 
     const file = input.files?.[0];
+    document.body.removeChild(input);
     if (!file) return;
 
     await handleFileUpload(editor, file, signal);
   };
 
-  input.click();
+  // Must be in the DOM before click() so Playwright (and some browsers) can detect the file chooser.
+  // setTimeout(50) defers the native file-picker click so that:
+  //   • Playwright's await locator.click() returns immediately (the click action itself is done)
+  //   • E2E tests using setInputFiles() have time to set files on the input before the native
+  //     picker fires (avoiding CDP file-chooser intercept with no handler, which blocks headless)
+  //   • Production: 50ms is well within Chrome's transient user-activation window (~5 s)
+  document.body.appendChild(input);
+  setTimeout(() => {
+    // Re-check abort in case navigation happened during the 50ms window
+    if (!signal?.aborted) {
+      input.click();
+    }
+  }, 50);
 }

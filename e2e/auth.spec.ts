@@ -82,6 +82,33 @@ test.describe('Authentication', () => {
     await expect(page).toHaveURL(/\/login/)
   })
 
+  test('redirects to login when session cookie is cleared mid-session', async ({ page }) => {
+    // Risk mitigated: if session middleware silently fails, users could lose unsaved work or
+    // see stale data from another session. This test confirms the redirect behaviour on session
+    // expiry.
+
+    // Step 1: Login successfully
+    await page.goto('/login')
+    await page.locator('#email').fill('dev@ship.local')
+    await page.locator('#password').fill('admin123')
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    await expect(page).not.toHaveURL('/login', { timeout: 5000 })
+
+    // Step 2: Verify we're in the app
+    await page.goto('/docs')
+    await expect(page).not.toHaveURL('/login', { timeout: 5000 })
+
+    // Step 3: Clear the session cookie (simulates session expiry)
+    await page.context().clearCookies()
+
+    // Step 4: Navigate to a protected route — ProtectedRoute checks auth via /api/auth/me
+    // which returns 401 with no valid session, setting user=null and triggering redirect
+    await page.goto('/docs')
+
+    // Step 5: Should redirect to login
+    await expect(page).toHaveURL(/\/login/, { timeout: 10000 })
+  })
+
   test('login is case-insensitive for email', async ({ page }) => {
     await page.goto('/login')
 
