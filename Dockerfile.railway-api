@@ -6,23 +6,30 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml tsconfig.json ./
 COPY api/ ./api/
 COPY shared/ ./shared/
+COPY web/ ./web/
 
-# Add npm workspaces + remove pnpm packageManager field
+# Add npm workspaces for shared, api, web — remove pnpm packageManager field
 RUN node -e " \
   const p = JSON.parse(require('fs').readFileSync('package.json', 'utf8')); \
-  p.workspaces = ['shared', 'api']; \
+  p.workspaces = ['shared', 'api', 'web']; \
   delete p.packageManager; \
   require('fs').writeFileSync('package.json', JSON.stringify(p)); \
 "
 
 # Replace pnpm workspace:* protocol with * so npm can resolve it
 RUN sed -i 's/"workspace:\*"/"*"/g' api/package.json
+RUN sed -i 's/"workspace:\*"/"*"/g' web/package.json 2>/dev/null || true
 
-# Install all deps (npm workspaces links shared into api automatically)
+# Install all deps (npm workspaces links shared into api and web automatically)
 RUN npm install --workspaces --include=dev --ignore-scripts
 
-# Build shared types first, then api
+# Build shared types first
 RUN npm run build --workspace=shared
+
+# Build Vite frontend (empty API URL = same-origin relative paths)
+RUN VITE_API_URL="" npm run build --workspace=web
+
+# Build API TypeScript
 RUN npm run build --workspace=api
 
 # Prune dev deps
