@@ -1,0 +1,36 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+# Copy everything first
+COPY package.json pnpm-workspace.yaml tsconfig.json ./
+COPY api/ ./api/
+COPY shared/ ./shared/
+
+# Add npm workspaces + remove pnpm packageManager field
+RUN node -e " \
+  const p = JSON.parse(require('fs').readFileSync('package.json', 'utf8')); \
+  p.workspaces = ['shared', 'api']; \
+  delete p.packageManager; \
+  require('fs').writeFileSync('package.json', JSON.stringify(p)); \
+"
+
+# Replace pnpm workspace:* protocol with * so npm can resolve it
+RUN sed -i 's/"workspace:\*"/"*"/g' api/package.json
+
+# Install all deps (npm workspaces links shared into api automatically)
+RUN npm install --workspaces --include=dev --ignore-scripts
+
+# Build shared types first, then api
+RUN npm run build --workspace=shared
+RUN npm run build --workspace=api
+
+# Prune dev deps
+RUN npm prune --workspaces --omit=dev
+
+EXPOSE 3000
+ENV NODE_ENV=production
+ENV PORT=3000
+
+WORKDIR /app/api
+CMD ["sh", "-c", "node dist/db/migrate.js && node dist/index.js"]

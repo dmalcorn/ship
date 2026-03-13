@@ -2,31 +2,41 @@
 node_modules
 **/node_modules
 
-# Build artifacts (but NOT api/dist and shared/dist which are needed)
-!api/dist
-!shared/dist
+# Build output (keep api/dist and shared/dist — needed for Railway pre-built deploy)
 *.tsbuildinfo
 **/*.tsbuildinfo
+web/dist
 
-# Development files
+# Development / CI files
 .git
 .gitignore
+.devcontainer
 .env*
-*.md
-README.md
-docs
 .vscode
 .idea
 
-# Test files
+# Docs and plans (not needed at runtime)
+*.md
+docs
+gauntlet_docs
+plans
+research
+_bmad
+_bmad-output
+
+# Test files and results
 *.test.ts
 *.spec.ts
 __tests__
 coverage
+e2e
+test-results
+playwright-report
 
-# Frontend build artifacts - source needed for local dev, but not prod API image
-web/node_modules
-web/dist
+# Infrastructure / deploy artifacts
+terraform
+*.zip
+deploy-*.zip
 
 # Logs
 *.log

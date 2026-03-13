@@ -1,0 +1,35 @@
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+# Copy everything
+COPY package.json pnpm-workspace.yaml tsconfig.json ./
+COPY web/ ./web/
+COPY shared/ ./shared/
+
+# Add npm workspaces, remove pnpm packageManager field
+RUN node -e " \
+  const p = JSON.parse(require('fs').readFileSync('package.json', 'utf8')); \
+  p.workspaces = ['shared', 'web']; \
+  delete p.packageManager; \
+  require('fs').writeFileSync('package.json', JSON.stringify(p)); \
+"
+
+# Replace pnpm workspace:* protocol
+RUN sed -i 's/"workspace:\*"/"*"/g' web/package.json 2>/dev/null || true
+
+# Install deps
+RUN npm install --workspaces --include=dev --ignore-scripts
+
+# Build shared types, then web
+RUN npm run build --workspace=shared
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+RUN npm run build --workspace=web
+
+# Serve with nginx
+FROM nginx:alpine
+COPY --from=builder /app/web/dist /usr/share/nginx/html
+COPY web/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
