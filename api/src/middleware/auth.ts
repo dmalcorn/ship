@@ -3,19 +3,6 @@ import crypto from 'crypto';
 import { pool } from '../db/client.js';
 import { SESSION_TIMEOUT_MS, ABSOLUTE_SESSION_TIMEOUT_MS, ERROR_CODES, HTTP_STATUS } from '@ship/shared';
 
-// Extend Express Request to include session info
-declare global {
-  namespace Express {
-    interface Request {
-      sessionId?: string;
-      userId?: string;
-      workspaceId?: string;
-      isSuperAdmin?: boolean;
-      isApiToken?: boolean; // True when authenticated via API token
-    }
-  }
-}
-
 // Hash a token for comparison
 function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');

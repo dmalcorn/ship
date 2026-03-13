@@ -334,14 +334,14 @@ export function WeekTimeline({
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     windows.forEach((window) => {
-      const monthName = monthNames[window.start_date.getMonth()];
+      const monthName = monthNames[window.start_date.getMonth()]!;
       const year = window.start_date.getFullYear();
 
       if (!currentGroup || currentGroup.month !== monthName || currentGroup.year !== year) {
         currentGroup = { month: monthName, year, windows: [] };
         groups.push(currentGroup);
       }
-      currentGroup.windows.push(window);
+      currentGroup!.windows.push(window);
     });
 
     return groups;
@@ -363,7 +363,7 @@ export function WeekTimeline({
 
     if (windowIndex === -1) return null; // Today is not visible in current range
 
-    const window = windows[windowIndex];
+    const window = windows[windowIndex]!;
     const windowStart = new Date(window.start_date);
     windowStart.setHours(0, 0, 0, 0);
 

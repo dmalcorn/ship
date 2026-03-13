@@ -246,8 +246,8 @@ export function TeamModePage() {
 
       if (json.weeks.length > 0) {
         setSprintRange({
-          min: json.weeks[0].number,
-          max: json.weeks[json.weeks.length - 1].number,
+          min: json.weeks[0]!.number,
+          max: json.weeks[json.weeks.length - 1]!.number,
         });
       }
 
@@ -511,10 +511,9 @@ export function TeamModePage() {
 
   // Clear error after 3 seconds
   useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => setError(null), 3000);
-      return () => clearTimeout(timer);
-    }
+    if (!error) return;
+    const timer = setTimeout(() => setError(null), 3000);
+    return () => clearTimeout(timer);
   }, [error]);
 
   if (loading) {

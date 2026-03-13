@@ -407,7 +407,7 @@ function groupByDate(standups: Standup[]): { label: string; standups: Standup[] 
     if (!groups[label]) {
       groups[label] = [];
     }
-    groups[label].push(standup);
+    groups[label]!.push(standup);
   }
 
   // Convert to array and maintain order (most recent first)

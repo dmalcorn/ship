@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import * as Y from 'yjs'
 import { pool } from '../../db/client.js'
-import { jsonToYjs, yjsToJson, loadContentFromYjsState } from '../../utils/yjsConverter.js'
+import { jsonToYjs, yjsToJson, loadContentFromYjsState, type TipTapDoc, type TipTapElementNode, type TipTapTextNode } from '../../utils/yjsConverter.js'
 
 /**
  * API Content Preservation Tests
@@ -115,8 +115,8 @@ describe('API Content Preservation', () => {
       const convertedBack = yjsToJson(fragment)
       expect(convertedBack.type).toBe('doc')
       expect(convertedBack.content).toHaveLength(2)
-      expect(convertedBack.content[0].type).toBe('heading')
-      expect(convertedBack.content[1].type).toBe('paragraph')
+      expect(convertedBack.content[0]?.type).toBe('heading')
+      expect(convertedBack.content[1]?.type).toBe('paragraph')
 
       // Cleanup
       await pool.query('DELETE FROM documents WHERE id = $1', [docId])
@@ -316,7 +316,7 @@ describe('API Content Preservation', () => {
 
         // Convert back and check text
         const convertedBack = yjsToJson(fragment)
-        expect(convertedBack.content[0].content[0].text).toBe(`Content for ${docType}`)
+        expect(((convertedBack.content[0] as TipTapElementNode)?.content?.[0] as TipTapTextNode).text).toBe(`Content for ${docType}`)
 
         // Cleanup
         await pool.query('DELETE FROM documents WHERE id = $1', [docId])
@@ -383,15 +383,15 @@ describe('API Content Preservation', () => {
       expect(fragment.length).toBe(2)
 
       const convertedBack = yjsToJson(fragment)
-      expect(convertedBack.content[0].content[0].text).toBe('Updated content via API')
-      expect(convertedBack.content[1].content[0].text).toBe('Second paragraph added')
+      expect(((convertedBack.content[0] as TipTapElementNode)?.content?.[0] as TipTapTextNode).text).toBe('Updated content via API')
+      expect(((convertedBack.content[1] as TipTapElementNode)?.content?.[0] as TipTapTextNode).text).toBe('Second paragraph added')
 
       // Cleanup
       await pool.query('DELETE FROM documents WHERE id = $1', [docId])
     })
 
     it('should handle Yjs state being persisted and reloaded', async () => {
-      const content = {
+      const content: TipTapDoc = {
         type: 'doc',
         content: [
           {
@@ -438,7 +438,7 @@ describe('API Content Preservation', () => {
       expect(fragment2.length).toBe(1)
 
       const convertedBack = yjsToJson(fragment2)
-      expect(convertedBack.content[0].content[0].text).toBe('Will be persisted as Yjs')
+      expect(((convertedBack.content[0] as TipTapElementNode)?.content?.[0] as TipTapTextNode).text).toBe('Will be persisted as Yjs')
 
       // Cleanup
       await pool.query('DELETE FROM documents WHERE id = $1', [docId])
@@ -596,7 +596,7 @@ describe('API Content Preservation', () => {
 
   describe('loadContentFromYjsState utility', () => {
     it('should convert Yjs state buffer to TipTap JSON', async () => {
-      const content = {
+      const content: TipTapDoc = {
         type: 'doc',
         content: [
           {
@@ -618,16 +618,16 @@ describe('API Content Preservation', () => {
       const result = loadContentFromYjsState(state)
 
       expect(result).not.toBeNull()
-      expect(result.type).toBe('doc')
-      expect(result.content).toHaveLength(1)
-      expect(result.content[0].type).toBe('paragraph')
-      expect(result.content[0].content[0].text).toBe('Test for utility function')
+      expect(result?.type).toBe('doc')
+      expect(result?.content).toHaveLength(1)
+      expect(result?.content[0]?.type).toBe('paragraph')
+      expect(((result?.content[0] as TipTapElementNode)?.content?.[0] as TipTapTextNode)?.text).toBe('Test for utility function')
     })
   })
 
   describe('Content invalidation and reload', () => {
     it('should correctly reload content after yjs_state is cleared', async () => {
-      const initialContent = {
+      const initialContent: TipTapDoc = {
         type: 'doc',
         content: [
           {
@@ -697,7 +697,7 @@ describe('API Content Preservation', () => {
       expect(fragment2.length).toBe(1)
 
       const convertedBack = yjsToJson(fragment2)
-      expect(convertedBack.content[0].content[0].text).toBe('Updated via API')
+      expect(((convertedBack.content[0] as TipTapElementNode)?.content?.[0] as TipTapTextNode).text).toBe('Updated via API')
 
       // Cleanup
       await pool.query('DELETE FROM documents WHERE id = $1', [docId])
@@ -753,7 +753,7 @@ describe('API Content Preservation', () => {
       jsonToYjs(doc, fragment, result.rows[0].content)
 
       const convertedBack = yjsToJson(fragment)
-      expect(convertedBack.content[0].content[0].text).toBe('Version 5')
+      expect(((convertedBack.content[0] as TipTapElementNode)?.content?.[0] as TipTapTextNode).text).toBe('Version 5')
 
       // Cleanup
       await pool.query('DELETE FROM documents WHERE id = $1', [docId])
