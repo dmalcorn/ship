@@ -172,16 +172,21 @@ fix(auth): throttle session UPDATE to reduce redundant DB writes
 
 ### Agent Model Used
 
-_to be filled in by dev agent_
+claude-sonnet-4-6
 
 ### Debug Log References
 
-_to be filled in by dev agent_
+None
 
 ### Completion Notes List
 
-_to be filled in by dev agent_
+- Wrapped UPDATE in `SESSION_UPDATE_THROTTLE_MS = 30_000` guard at auth.ts:207
+- Used existing `inactivityMs` variable (already computed at line 151) — no new computation needed
+- Follows the same pattern as the existing COOKIE_REFRESH_THRESHOLD_MS throttle at line 216
+- Timeout correctness verified: 15-min inactivity check runs BEFORE the throttle; 12-hr absolute timeout uses created_at, not last_activity
+- Unit tests in `src/__tests__/auth.test.ts` required `vi.clearAllMocks()` → `vi.resetAllMocks()` fix to prevent mock queue bleed from skipped pool.query calls
 
 ### File List
 
 - `api/src/middleware/auth.ts` (modified — wrap UPDATE in 30s throttle guard)
+- `api/src/__tests__/auth.test.ts` (modified — clearAllMocks → resetAllMocks to prevent mock bleed)

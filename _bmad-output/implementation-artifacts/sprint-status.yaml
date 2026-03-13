@@ -41,38 +41,38 @@ story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
 development_status:
   # ─── Epic 1: Crash-Safe & Secure API Responses ───────────────────────────────
-  epic-1: in-progress
-  1-1-capture-all-7-category-baselines: review
-  1-2-global-express-error-middleware: ready-for-dev
-  1-3-process-level-crash-guards: ready-for-dev
-  1-4-uuid-path-parameter-validation: ready-for-dev
-  1-5-cat-6-after-evidence-and-improvement-documentation: ready-for-dev
+  epic-1: done
+  1-1-capture-all-7-category-baselines: done
+  1-2-global-express-error-middleware: done
+  1-3-process-level-crash-guards: done
+  1-4-uuid-path-parameter-validation: done
+  1-5-cat-6-after-evidence-and-improvement-documentation: done
   epic-1-retrospective: optional
 
   # ─── Epic 2: Faster Initial Page Load ────────────────────────────────────────
-  epic-2: in-progress
-  2-1-gate-reactquerydevtools-behind-dev-flag: ready-for-dev
-  2-2-remove-dead-dependency: ready-for-dev
-  2-3-lazy-load-emoji-picker: ready-for-dev
-  2-4-add-manualchunks-for-stable-vendors: ready-for-dev
-  2-5-cat-2-after-evidence-and-improvement-documentation: ready-for-dev
+  epic-2: done
+  2-1-gate-reactquerydevtools-behind-dev-flag: done
+  2-2-remove-dead-dependency: done
+  2-3-lazy-load-emoji-picker: done
+  2-4-add-manualchunks-for-stable-vendors: done
+  2-5-cat-2-after-evidence-and-improvement-documentation: done
   epic-2-retrospective: optional
 
   # ─── Epic 3: Faster API & Scalable Data Fetching ─────────────────────────────
-  epic-3: in-progress
-  3-1-strip-content-column-from-issues-list: ready-for-dev
-  3-2-add-document-type-filter-parameter: ready-for-dev
-  3-3-add-pagination-to-documents-endpoint: ready-for-dev
-  3-4-update-frontend-sidebar-to-use-paginated-endpoint: ready-for-dev
-  3-5-cat-3-after-evidence-and-improvement-documentation: review
+  epic-3: done
+  3-1-strip-content-column-from-issues-list: done
+  3-2-add-document-type-filter-parameter: done
+  3-3-add-pagination-to-documents-endpoint: done
+  3-4-update-frontend-sidebar-to-use-paginated-endpoint: done
+  3-5-cat-3-after-evidence-and-improvement-documentation: done
   epic-3-retrospective: optional
 
   # ─── Epic 4: Reliable Database Performance ───────────────────────────────────
-  epic-4: backlog
-  4-1-add-pg-trgm-gin-index-for-ilike-search: backlog
-  4-2-conditional-session-update: backlog
-  4-3-add-statement-timeout-to-connection-pool: backlog
-  4-4-cat-4-after-evidence-and-improvement-documentation: backlog
+  epic-4: done
+  4-1-add-pg-trgm-gin-index-for-ilike-search: done
+  4-2-conditional-session-update: done
+  4-3-add-statement-timeout-to-connection-pool: done
+  4-4-cat-4-after-evidence-and-improvement-documentation: done
   epic-4-retrospective: optional
 
   # ─── Epic 5: Type-Safe, Maintainable Codebase ────────────────────────────────

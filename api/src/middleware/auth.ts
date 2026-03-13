@@ -201,11 +201,15 @@ export async function authMiddleware(
       }
     }
 
-    // Update last activity
-    await pool.query(
-      'UPDATE sessions SET last_activity = $1 WHERE id = $2',
-      [now, sessionId]
-    );
+    // Throttle session UPDATE: skip if last_activity was refreshed within the last 30s.
+    // Reduces redundant writes on rapid sequential requests (e.g. main page load).
+    const SESSION_UPDATE_THROTTLE_MS = 30_000;
+    if (inactivityMs > SESSION_UPDATE_THROTTLE_MS) {
+      await pool.query(
+        'UPDATE sessions SET last_activity = $1 WHERE id = $2',
+        [now, sessionId]
+      );
+    }
 
     // Refresh cookie with sliding expiration (throttled to avoid overhead)
     // Only refresh if more than 60 seconds since last activity
