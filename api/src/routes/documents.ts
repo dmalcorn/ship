@@ -107,6 +107,19 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     const userId = req.userId!;
     const workspaceId = req.workspaceId!;
 
+    // Validate document type param
+    const VALID_DOC_TYPES = ['wiki', 'issue', 'program', 'project', 'sprint', 'person', 'weekly_plan', 'weekly_retro'] as const;
+    if (type && !VALID_DOC_TYPES.includes(type as typeof VALID_DOC_TYPES[number])) {
+      res.status(400).json({ error: 'Invalid document type' });
+      return;
+    }
+
+    // Parse pagination params
+    const limitRaw = parseInt(req.query.limit as string, 10);
+    const offsetRaw = parseInt(req.query.offset as string, 10);
+    const limit = isNaN(limitRaw) || limitRaw < 1 ? 100 : Math.min(limitRaw, 500);
+    const offset = isNaN(offsetRaw) || offsetRaw < 0 ? 0 : offsetRaw;
+
     // Check if user is admin (admins can see all documents)
     const isAdmin = await isWorkspaceAdmin(userId, workspaceId);
 
@@ -120,7 +133,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
         AND deleted_at IS NULL
         AND (visibility = 'workspace' OR created_by = $2 OR $3 = TRUE)
     `;
-    const params: (string | boolean | null)[] = [workspaceId, userId, isAdmin];
+    const params: (string | boolean | null | number)[] = [workspaceId, userId, isAdmin];
 
     if (type) {
       query += ` AND document_type = $${params.length + 1}`;
@@ -137,6 +150,10 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     }
 
     query += ` ORDER BY position ASC, created_at DESC`;
+    params.push(limit);
+    query += ` LIMIT $${params.length}`;
+    params.push(offset);
+    query += ` OFFSET $${params.length}`;
 
     const result = await pool.query(query, params);
 

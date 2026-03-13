@@ -150,7 +150,7 @@ export function CommandPalette({ open, onOpenChange, currentDocument, onConvertD
     const fetchDocuments = async () => {
       setLoading(true);
       try {
-        const res = await apiGet('/api/documents');
+        const res = await apiGet('/api/documents?limit=200');
         if (res.ok) {
           const data = await res.json();
           setDocuments(data);
