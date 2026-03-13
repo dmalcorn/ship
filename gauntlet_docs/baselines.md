@@ -238,7 +238,7 @@ Docker WAS available in the devcontainer. A full E2E run completed overnight.
 
 | Spec | Failures | Category |
 |---|---|---|
-| `file-attachments.spec` | 13 | Pre-existing (upload timing/filechooser) |
+| `file-attachments.spec` | 13 | Pre-existing (stale AbortSignal in useMemo — **fixed in fix/test-coverage**) |
 | `images.spec` | 6 | Pre-existing (CDN/upload timing) |
 | `data-integrity.spec` | 3 | Timing-sensitive |
 | `race-conditions.spec` | 2 | Timing-sensitive |
@@ -264,7 +264,7 @@ Docker WAS available in the devcontainer. A full E2E run completed overnight.
 | Total tests | 869 | 869 | ✅ Identical |
 | Passed | 836 | 836 | ✅ Identical |
 | Distinct failures | 33 | 41 | +8 — timing variability in devcontainer; 1 caused by IPv4 fix already applied |
-| file-attachments failures | 13 | 13 | ✅ Identical — pre-existing |
+| file-attachments failures | 13 | 13 (baseline) → **0** (post-fix) | ✅ Fixed in fix/test-coverage |
 
 **Key finding:** 836 passing matches the audit exactly. The 8 extra failures are timing-sensitive tests that are flaky under devcontainer load — not regressions. The `session-timeout.spec` `returnTo` failure is a test-code issue introduced by the IPv4 fix (test asserts `"localhost"` in URL, but server now binds to `127.0.0.1`).
 

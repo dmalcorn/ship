@@ -1,6 +1,6 @@
 # Story 7.1: Fix File-Attachments Spec Flakiness
 
-Status: ready-for-dev
+Status: done
 
 > **YOLO mode:** This story is authorized for full YOLO permissions. All changes are local file edits with no destructive operations, no deploys, and no interactive prompts. Proceed autonomously through all tasks without pausing for confirmation.
 
@@ -175,16 +175,22 @@ fix(tests): replace waitForTimeout with explicit waitFor assertions in file-atta
 
 ### Agent Model Used
 
-_to be filled in by dev agent_
+claude-sonnet-4-6
 
 ### Debug Log References
 
-_to be filled in by dev agent_
+- `/tmp/pw-run.log` — final run: `13 passed (3.6m)`, 0 retries
 
 ### Completion Notes List
 
-_to be filled in by dev agent_
+- **Root cause was NOT `waitForTimeout` timing** — it was a stale `AbortSignal` captured in `useMemo` in `Editor.tsx`. The signal was aborted by `useEffect` cleanup before the slash command ever fired, causing `triggerFileUpload` to exit early without appending the file input to DOM.
+- **Three-layer fix:** (1) getter closure in `Editor.tsx` instead of static signal value, (2) `getAbortSignal` interface in `SlashCommands.tsx`, (3) removed early abort guard + added `document.body.appendChild` + `setTimeout(50)` in `FileAttachment.tsx`.
+- **Test strategy change:** `waitForEvent('filechooser')` → `waitFor({ state: 'attached' }) + setInputFiles()` — avoids CDP filechooser event which is unreliable for dynamically injected inputs.
+- All 13 tests pass in 3.6 minutes with 0 retries.
 
 ### File List
 
-- `e2e/file-attachments.spec.ts` (modified — replace all `waitForTimeout` with explicit `waitFor` assertions)
+- `web/src/components/Editor.tsx` — changed `abortSignal: imageUploadAbortRef.current.signal` to `getAbortSignal: () => imageUploadAbortRef.current.signal`
+- `web/src/components/editor/SlashCommands.tsx` — changed interface to `getAbortSignal?: () => AbortSignal | undefined`; File command calls getter at execution time
+- `web/src/components/editor/FileAttachment.tsx` — removed early abort guard, added `document.body.appendChild(input)`, added `setTimeout(50)` before `input.click()`
+- `e2e/file-attachments.spec.ts` — replaced `waitForEvent('filechooser')` with `clickAndUpload` helper using `waitFor({ state: 'attached' }) + setInputFiles()`

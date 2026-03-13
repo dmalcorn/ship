@@ -503,13 +503,16 @@ export function Editor({
   }, [documentId, userName, color, ydoc, roomPrefix, onBack, onDocumentConverted]);
 
   // Create slash commands extension (memoized to avoid recreation)
-  // documentId is in deps to ensure fresh AbortSignal when switching documents
+  // Pass the ref itself so the command can read the *current* signal at execution time.
+  // (Passing imageUploadAbortRef.current.signal directly captures a stale signal: useMemo
+  // runs during render, before the useEffect cleanup aborts the old controller and creates
+  // a new one — so the captured signal ends up already-aborted when the command fires.)
   const slashCommandsExtension = useMemo(() => {
     return createSlashCommands({
       onCreateSubDocument,
       onNavigateToDocument,
       documentType,
-      abortSignal: imageUploadAbortRef.current.signal,
+      getAbortSignal: () => imageUploadAbortRef.current.signal,
     });
   }, [onCreateSubDocument, onNavigateToDocument, documentType, documentId]);
 

@@ -45,6 +45,18 @@ function createTestFile(filename: string, content: string): string {
   return tmpPath;
 }
 
+// Helper to upload a file via the slash command menu.
+// triggerFileUpload() appends a hidden <input type="file"> to document.body before
+// calling input.click(). In headless Chromium the native file-picker never opens, so
+// the input stays in the DOM. We find it with a direct-child selector and call
+// setInputFiles() to dispatch the 'change' event without needing a file-chooser dialog.
+async function clickAndUpload(page: Page, buttonLocator: ReturnType<Page['getByRole']>, filePath: string) {
+  await buttonLocator.click();
+  const fileInput = page.locator('body > input[type="file"]');
+  await fileInput.waitFor({ state: 'attached', timeout: 5000 });
+  await fileInput.setInputFiles(filePath);
+}
+
 test.describe('File Attachments', () => {
   test.beforeEach(async ({ page }) => {
     // Login before each test
@@ -71,6 +83,8 @@ test.describe('File Attachments', () => {
     //   guarantee the slash command popup has appeared.
     // Fix: removed fixed delays after editor.click(); replaced /file popup wait with explicit
     //   toBeVisible assertion on the file option button.
+    // Fix 2: replaced waitForEvent('filechooser') with direct setInputFiles() on the input
+    //   that triggerFileUpload() appends to document.body before clicking.
     await createNewDocument(page);
 
     const editor = page.locator('.ProseMirror');
@@ -87,13 +101,8 @@ test.describe('File Attachments', () => {
     // Create test file
     const tmpPath = createTestFile('test-document.pdf', 'PDF file content');
 
-    // Click the File option and wait for file chooser
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileOption.click();
-
-    // Handle file chooser
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    // Click the File option — triggerFileUpload appends input to body, then we set files directly
+    await clickAndUpload(page, fileOption, tmpPath);
 
     // Wait for file attachment to appear in editor
     await expect(editor.locator('[data-file-attachment]')).toBeVisible({ timeout: 5000 });
@@ -121,11 +130,7 @@ test.describe('File Attachments', () => {
     const fileButton = page.getByRole('button', { name: /^File Upload a file attachment/i });
     await expect(fileButton).toBeVisible({ timeout: 5000 });
 
-    // Select file option
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     // Should show some upload indicator (spinner, progress bar, or "uploading" text)
     const uploadIndicator = page.locator('[data-file-attachment]');
@@ -156,10 +161,7 @@ test.describe('File Attachments', () => {
 
     const tmpPath = createTestFile('download-test.txt', 'Test content');
 
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     // File attachment should have a clickable link/button
     const fileAttachment = editor.locator('[data-file-attachment]');
@@ -193,10 +195,7 @@ test.describe('File Attachments', () => {
     // Create a potentially restricted file type (e.g., .exe)
     const tmpPath = createTestFile('potentially-dangerous.exe', 'Not really an exe');
 
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     // Either:
     // 1. File is rejected (no attachment appears)
@@ -229,10 +228,7 @@ test.describe('File Attachments', () => {
 
     const tmpPath = createTestFile('persist-test.pdf', 'Persistent content');
 
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     const fileAttachment = editor.locator('[data-file-attachment]');
     // Wait until download link is present — confirms both upload + Yjs persistence are done
@@ -278,10 +274,7 @@ test.describe('File Attachments', () => {
 
     const tmpPath = createTestFile('icon-test.pdf', 'PDF content');
 
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     // Wait for file attachment to appear
     const fileAttachment = editor.locator('[data-file-attachment]');
@@ -318,10 +311,7 @@ test.describe('File Attachments', () => {
     const content = 'x'.repeat(1024 * 5); // ~5KB
     const tmpPath = createTestFile('size-test.txt', content);
 
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     // Wait for upload to fully complete — link only appears after upload + DB write
     const fileAttachment = editor.locator('[data-file-attachment]');
@@ -359,10 +349,7 @@ test.describe('File Attachments', () => {
     // Note: Real .docx is a ZIP archive, but for MIME detection we just need the extension
     const tmpPath = createTestFile('word-document.docx', 'Test Word document content');
 
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     // Wait for file attachment to appear (should NOT fail with "file type not allowed")
     const fileAttachment = editor.locator('[data-file-attachment]');
@@ -399,10 +386,7 @@ test.describe('File Attachments', () => {
 
     const tmpPath = createTestFile('legacy-document.doc', 'Legacy Word document');
 
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     // Wait for file attachment to appear
     const fileAttachment = editor.locator('[data-file-attachment]');
@@ -438,10 +422,7 @@ test.describe('File Attachments', () => {
     // Create a .psd file (was NOT in old allowlist)
     const tmpPath = createTestFile('design-file.psd', 'Photoshop file content');
 
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     // Wait for file attachment to appear (should succeed with blocklist approach)
     const fileAttachment = editor.locator('[data-file-attachment]');
@@ -486,10 +467,7 @@ test.describe('File Attachments', () => {
       await dialog.accept();
     });
 
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     // File attachment should NOT appear (upload was blocked)
     // Explicit not.toBeVisible replaces the fixed 1000ms + 2000ms waitForTimeout pattern
@@ -521,23 +499,14 @@ test.describe('File Attachments', () => {
     // This test verifies the alert message contains the size limit info
 
     // Listen for alert dialog about file size
-    let alertReceived = false;
     page.on('dialog', async (dialog) => {
-      if (dialog.message().includes('1GB') || dialog.message().includes('too large')) {
-        alertReceived = true;
-        await dialog.accept();
-      } else {
-        await dialog.accept();
-      }
+      await dialog.accept();
     });
 
     // Create a very small test file (the actual size check happens in JS)
     const tmpPath = createTestFile('large-file-test.zip', 'small content');
 
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     // This file is small so it should succeed
     await expect(editor.locator('[data-file-attachment]')).toBeVisible({ timeout: 5000 });
@@ -574,10 +543,7 @@ test.describe('File Attachments', () => {
     // Create a slightly larger file to give time for navigation attempt
     const tmpPath = createTestFile('nav-warning-test.txt', 'x'.repeat(50000));
 
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileButton.click();
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(tmpPath);
+    await clickAndUpload(page, fileButton, tmpPath);
 
     // Wait for upload to complete (small file, fast local upload)
     await expect(editor.locator('[data-file-attachment]')).toBeVisible({ timeout: 5000 });
