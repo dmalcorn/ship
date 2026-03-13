@@ -85,20 +85,21 @@ development_status:
   epic-5-retrospective: optional
 
   # ─── Epic 6: Accessible to All Users ─────────────────────────────────────────
-  epic-6: backlog
-  6-1-fix-color-contrast-violations: backlog
-  6-2-add-skip-navigation-link: backlog
-  6-3-replace-conversiondialog-with-radix-dialog: backlog
-  6-4-cat-7-after-evidence-and-improvement-documentation: backlog
+  epic-6: done
+  6-1-fix-color-contrast-violations: done
+  6-2-add-skip-navigation-link: done
+  6-3-replace-conversiondialog-with-radix-dialog: done
+  6-4-cat-7-after-evidence-and-improvement-documentation: done
   epic-6-retrospective: optional
 
   # ─── Epic 7: Reliable Test Suite ─────────────────────────────────────────────
-  epic-7: backlog
-  7-1-fix-file-attachments-spec-flakiness: backlog
-  7-2-new-test-document-creation-with-invalid-input: backlog
-  7-3-new-test-session-expiry-redirect: backlog
-  7-4-new-test-mention-search-returns-correct-results: backlog
-  7-5-cat-5-after-evidence-and-improvement-documentation: backlog
+  epic-7: in-progress
+  7-0-fix-preexisting-test-failures: ready-for-dev
+  7-1-fix-file-attachments-spec-flakiness: ready-for-dev
+  7-2-new-test-document-creation-with-invalid-input: ready-for-dev
+  7-3-new-test-session-expiry-redirect: ready-for-dev
+  7-4-new-test-mention-search-returns-correct-results: ready-for-dev
+  7-5-cat-5-after-evidence-and-improvement-documentation: ready-for-dev
   epic-7-retrospective: optional
 
   # ─── Epic 8: Submission Package ──────────────────────────────────────────────
