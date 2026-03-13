@@ -1,6 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import { csrfSync } from 'csrf-sync';
@@ -242,6 +245,19 @@ export function createApp(corsOrigin: string = 'http://localhost:5173'): express
   initializeCAIA().catch((err) => {
     console.warn('CAIA initialization failed:', err);
   });
+
+  // Serve React SPA static files when web/dist is present (combined API+web deploy)
+  const __appDir = dirname(fileURLToPath(import.meta.url));
+  const webDistPath = join(__appDir, '..', '..', 'web', 'dist');
+  if (existsSync(webDistPath)) {
+    app.use(express.static(webDistPath));
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/collaboration') || req.path === '/health') {
+        return next();
+      }
+      res.sendFile(join(webDistPath, 'index.html'));
+    });
+  }
 
   // Global error handler — MUST be last middleware, after all routes
   // Express identifies 4-argument functions as error handlers
