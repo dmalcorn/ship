@@ -22,10 +22,10 @@ RUN sed -i 's/"workspace:\*"/"*"/g' web/package.json 2>/dev/null || true
 RUN npm install --workspaces --include=dev --ignore-scripts
 
 # Build shared types, then web
+# VITE_API_URL is intentionally empty — nginx proxies /api and /collaboration
+# to the API service so all requests are same-origin (no cross-origin cookie issues)
 RUN npm run build --workspace=shared
-ARG VITE_API_URL
-ENV VITE_API_URL=$VITE_API_URL
-RUN npm run build --workspace=web
+RUN VITE_API_URL="" npm run build --workspace=web
 
 # Serve with nginx
 FROM nginx:alpine
