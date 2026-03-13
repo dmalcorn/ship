@@ -94,7 +94,10 @@ causing CSRF validation to fail on every state-changing request — including lo
 1. Login through nginx proxy returned 403 "CSRF token missing or invalid"
 2. `/api/csrf-token` returned no `Set-Cookie` when accessed via the nginx web service
 3. Direct API access (`api-production-*.up.railway.app`) correctly returned `Set-Cookie`
-4. Confirmed: Railway strips `Set-Cookie` from web service responses, not from API service responses
+4. Added `proxy_pass_header Set-Cookie;` to nginx — confirmed this fixed the header forwarding
+   (`x-debug-cookie` header in response showed nginx WAS receiving Set-Cookie from upstream,
+   but not forwarding it without the explicit directive; likely a `proxy_http_version 1.1` quirk)
+5. Adopted combined API+web architecture as a cleaner permanent fix
 
 **Fix:** Merged the frontend into the API service. `Dockerfile.railway-api` now builds
 the Vite frontend alongside the API. `api/src/app.ts` serves `web/dist/` as static files
