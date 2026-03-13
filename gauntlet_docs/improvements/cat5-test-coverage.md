@@ -7,6 +7,42 @@
 
 ---
 
+## Prerequisite: E2E Infrastructure Fix (IPv6/IPv4 Network Binding)
+
+Before any test fixes could be measured, a fundamental infrastructure problem had to be diagnosed and resolved. The full investigation is in [`_bmad-output/test-artifacts/e2e-ipv6-fix-discovery.md`](../../_bmad-output/test-artifacts/e2e-ipv6-fix-discovery.md).
+
+**Problem:** All 869 E2E tests were failing with `fetch failed: ECONNREFUSED` immediately — 0 passes, 100% failure rate. This was not a test logic problem.
+
+**Root cause:** Playwright's E2E fixture (`e2e/fixtures/isolated-env.ts`) starts a Vite preview server per worker. Without `--host`, Vite binds only to the IPv6 loopback `[::1]`. Node.js's `undici` HTTP client (used by `fetch`) cannot reliably connect to `[::1]` in this Linux container network namespace — the connection is refused at the socket level even though `ss -tlnp` confirms the port is in LISTEN state. `curl` succeeds (it retries both IPv4 and IPv6), but `fetch` fails immediately.
+
+**Discovery process:**
+```bash
+# Port IS bound — but only on IPv6
+ss -tlnp | grep 11201
+# → LISTEN 0  511  [::1]:11201  [::]:*
+
+# fetch fails immediately
+node -e "fetch('http://localhost:11201/').catch(e => console.log(e.cause?.code))"
+# → ECONNREFUSED
+
+# curl succeeds (tries IPv6 first, gets response after ~14s)
+curl -s http://localhost:11201/ | head -1
+# → <!DOCTYPE html>
+```
+
+**Additional discovery:** The Docker CLI binary is not on PATH (`docker: command not found`), but `@testcontainers/postgresql` uses the Docker socket directly (`/var/run/docker.sock` — accessible, Docker Engine v29.2.1). E2E tests work in this environment once the network binding is fixed.
+
+**Fix applied** (`e2e/fixtures/isolated-env.ts`):
+1. Added `--host 127.0.0.1` to the Vite preview spawn so it binds to IPv4
+2. Changed `webUrl` from `http://localhost:PORT` to `http://127.0.0.1:PORT`
+3. Increased startup timeout from 30s → 45s (Vite's first request takes ~14s)
+
+**Result:** Tests went from 0 passes to 836 passes on the first full run after the fix — matching the audit baseline exactly.
+
+**Side effect:** One test in `session-timeout.spec.ts` that asserted `expect(url).toContain('localhost')` started failing because URLs now contain `127.0.0.1`. This was fixed as part of Cat 5 (Fix 3 below).
+
+---
+
 ## Before Baseline (from gauntlet_docs/baselines.md)
 
 ### E2E Test Results (pre-fix)
