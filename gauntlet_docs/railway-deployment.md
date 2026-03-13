@@ -84,7 +84,64 @@ from the build context: `terraform/`, `*.zip`, `e2e/`, `test-results/`,
 
 ---
 
+## Architecture Decision: Combined API + Frontend Service
+
+**Problem:** Railway's edge layer strips `Set-Cookie` response headers from nginx web service
+responses. This prevented the CSRF session cookie (`connect.sid`) from reaching the browser,
+causing CSRF validation to fail on every state-changing request — including login.
+
+**Root cause discovery path:**
+1. Login through nginx proxy returned 403 "CSRF token missing or invalid"
+2. `/api/csrf-token` returned no `Set-Cookie` when accessed via the nginx web service
+3. Direct API access (`api-production-*.up.railway.app`) correctly returned `Set-Cookie`
+4. Confirmed: Railway strips `Set-Cookie` from web service responses, not from API service responses
+
+**Fix:** Merged the frontend into the API service. `Dockerfile.railway-api` now builds
+the Vite frontend alongside the API. `api/src/app.ts` serves `web/dist/` as static files
+with an SPA fallback route. All browser requests are now same-origin — no cookies need to
+cross service boundaries.
+
+**Impact:** The web nginx service is superseded. The app runs at the API service URL.
+The nginx config (`web/nginx.conf`) and `Dockerfile.railway-web` are retained for reference.
+
+---
+
 ## Core Code Changes
+
+### `api/src/app.ts` — Serve React SPA static files
+
+**What changed:** Added static file serving at the end of `createApp()`:
+
+```typescript
+const webDistPath = join(__appDir, '..', '..', 'web', 'dist');
+if (existsSync(webDistPath)) {
+  app.use(express.static(webDistPath));
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/collaboration')) return next();
+    res.sendFile(join(webDistPath, 'index.html'));
+  });
+}
+```
+
+**Why:** Serves the compiled React app from the same Express process that handles API requests.
+Same-origin serving means session cookies, CSRF tokens, and WebSocket connections all work
+without cross-origin constraints. Non-`/api` and non-`/collaboration` paths return `index.html`
+for client-side SPA routing.
+
+**Tradeoffs:** API and web must be rebuilt and deployed together. Acceptable given Railway's
+single-service architecture.
+
+---
+
+### `Dockerfile.railway-api` — Build web frontend alongside API
+
+**What changed:** Added `web/` package to the npm workspace build:
+- `COPY web/ ./web/`
+- Workspaces array now includes `'web'`
+- `RUN VITE_API_URL="" npm run build --workspace=web` before the API build
+- `VITE_API_URL=""` means the frontend uses relative paths (same-origin)
+
+---
 
 ### `api/src/config/ssm.ts` — Skip SSM on non-AWS hosts
 
@@ -177,8 +234,10 @@ The following env vars were configured on the Railway services via CLI
 | Service | URL | Notes |
 |---|---|---|
 | Postgres | (internal only) | Managed Railway PostgreSQL |
-| api | `https://api-production-71a9.up.railway.app` | Express + WebSocket |
-| web | `https://web-production-646ab.up.railway.app` | React SPA via nginx |
+| api | `https://api-production-71a9.up.railway.app` | Express + WebSocket + React SPA (combined) |
+| web | `https://web-production-646ab.up.railway.app` | nginx — superseded, no longer the app entry point |
+
+**Entry point:** `https://api-production-71a9.up.railway.app/`
 
 Railway project name: **creative-flow**
 Railway account: dianealcorn@gmail.com
