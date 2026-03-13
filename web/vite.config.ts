@@ -92,5 +92,27 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       proxy: proxyConfig,
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+                return 'vendor-react';
+              }
+              if (id.includes('/yjs/') || id.includes('y-indexeddb') || id.includes('y-websocket')) {
+                return 'vendor-yjs';
+              }
+              if (id.includes('@tiptap/pm') || id.includes('prosemirror')) {
+                return 'vendor-prosemirror';
+              }
+              if (id.includes('@tiptap/')) {
+                return 'vendor-tiptap';
+              }
+            }
+          },
+        },
+      },
+    },
   };
 });

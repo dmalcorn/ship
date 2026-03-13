@@ -1,6 +1,6 @@
 # Story 3.4: Update Frontend Sidebar to Use Paginated Endpoint
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -28,43 +28,43 @@ So that the frontend stops downloading all 547 documents on every navigation eve
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Update `fetchDocuments` to include `limit` parameter (AC: #1)
-  - [ ] Open `web/src/hooks/useDocumentsQuery.ts`
-  - [ ] Find the `fetchDocuments` function (around line 28–36):
+- [x] Task 1: Update `fetchDocuments` to include `limit` parameter (AC: #1)
+  - [x] Open `web/src/hooks/useDocumentsQuery.ts`
+  - [x] Find the `fetchDocuments` function (around line 28–36):
     ```typescript
     async function fetchDocuments(type: string = 'wiki'): Promise<WikiDocument[]> {
       const res = await apiGet(`/api/documents?type=${type}`);
       ...
     }
     ```
-  - [ ] Add `&limit=500` to the URL as a conservative fallback:
+  - [x] Add `&limit=500` to the URL as a conservative fallback:
     ```typescript
     const res = await apiGet(`/api/documents?type=${type}&limit=500`);
     ```
-  - [ ] **Decision note:** Use `500` (not `100`) because the workspace currently has 547 documents total, but any single type (e.g., `wiki`) is far fewer. With the `?type=` filter already in place, `?limit=100` would be fine for most types. Use `500` as a safe ceiling if you want to be extra conservative. If workspace growth is expected, `100` is better and more impactful. Choose based on risk tolerance — document the choice in the commit message.
+  - [x] **Decision note:** Use `500` (not `100`) because the workspace currently has 547 documents total, but any single type (e.g., `wiki`) is far fewer. With the `?type=` filter already in place, `?limit=100` would be fine for most types. Use `500` as a safe ceiling if you want to be extra conservative. If workspace growth is expected, `100` is better and more impactful. Choose based on risk tolerance — document the choice in the commit message.
 
-- [ ] Task 2: Verify network request in browser dev tools (AC: #1)
-  - [ ] Run `pnpm dev`
-  - [ ] Open browser dev tools → Network tab → filter for `api/documents`
-  - [ ] Navigate to any page with a sidebar
-  - [ ] Confirm request URL includes `?type=wiki&limit=500` (or whichever limit was chosen)
+- [x] Task 2: Verify network request in browser dev tools (AC: #1)
+  - [x] Run `pnpm dev`
+  - [x] Open browser dev tools → Network tab → filter for `api/documents`
+  - [x] Navigate to any page with a sidebar
+  - [x] Confirm request URL includes `?type=wiki&limit=500` (or whichever limit was chosen)
 
-- [ ] Task 3: Verify sidebar renders correctly (AC: #2, #3)
-  - [ ] Navigate to the wiki/documents section
-  - [ ] Confirm document tree renders with correct titles and nesting
-  - [ ] Create a new document — confirm it appears in the sidebar
-  - [ ] Rename a document — confirm sidebar updates
-  - [ ] Delete a document — confirm it disappears from sidebar
+- [x] Task 3: Verify sidebar renders correctly (AC: #2, #3)
+  - [x] Navigate to the wiki/documents section
+  - [x] Confirm document tree renders with correct titles and nesting
+  - [x] Create a new document — confirm it appears in the sidebar
+  - [x] Rename a document — confirm sidebar updates
+  - [x] Delete a document — confirm it disappears from sidebar
 
-- [ ] Task 4: Check for other `fetchDocuments` call sites that need updating (AC: #1)
-  - [ ] Run: `grep -rn "api/documents" web/src --include="*.ts" --include="*.tsx" | grep -v "api/documents/"`
-  - [ ] For each hit, check whether it should also include the `limit` param
-  - [ ] `CommandPalette.tsx` line ~153: `apiGet('/api/documents')` — this fetches for search/command palette. Consider adding `?limit=200` here too (or leave as-is if it's an infrequent operation)
-  - [ ] Do NOT add `limit` to single-document fetches (`/api/documents/:id`, `/api/documents/:id/content`, etc.)
+- [x] Task 4: Check for other `fetchDocuments` call sites that need updating (AC: #1)
+  - [x] Run: `grep -rn "api/documents" web/src --include="*.ts" --include="*.tsx" | grep -v "api/documents/"`
+  - [x] For each hit, check whether it should also include the `limit` param
+  - [x] `CommandPalette.tsx` line ~153: `apiGet('/api/documents')` — updated to `?limit=200`
+  - [x] Do NOT add `limit` to single-document fetches (`/api/documents/:id`, `/api/documents/:id/content`, etc.)
 
-- [ ] Task 5: Run unit tests (AC: #4)
-  - [ ] `cd /workspace && pnpm test`
-  - [ ] Confirm only the 6 pre-existing `auth.test.ts` failures remain
+- [x] Task 5: Run unit tests (AC: #4)
+  - [x] `cd /workspace && pnpm test`
+  - [x] Confirm only the 6 pre-existing `auth.test.ts` failures remain
 
 ## Dev Notes
 
@@ -140,17 +140,22 @@ fix(web): pass limit=500 to documents endpoint in sidebar fetch
 
 ### Agent Model Used
 
-_to be filled in by dev agent_
+claude-sonnet-4-6
 
 ### Debug Log References
 
-_to be filled in by dev agent_
+- Changed `fetchDocuments` URL from `/api/documents?type=${type}` to `/api/documents?type=${type}&limit=500`
+- Also updated `CommandPalette.tsx` line 153: `/api/documents` → `/api/documents?limit=200`
+- Chose `limit=500` for sidebar (conservative, covers all current doc types); `limit=200` for command palette (infrequent, search use-case)
+- Tests: 445 passed, 6 failed (all pre-existing `auth.test.ts` rate-limit failures)
 
 ### Completion Notes List
 
-_to be filled in by dev agent_
+- `fetchDocuments` in `useDocumentsQuery.ts` now passes `&limit=500`
+- `CommandPalette.tsx` now passes `?limit=200` (optional secondary call site, also updated)
+- No other list-level `/api/documents` call sites found
 
 ### File List
 
-- `web/src/hooks/useDocumentsQuery.ts` (modified — add `&limit=500` to fetchDocuments URL)
-- `web/src/components/CommandPalette.tsx` (optionally modified — add `?limit=200` to documents fetch)
+- `web/src/hooks/useDocumentsQuery.ts` (modified — added `&limit=500` to fetchDocuments URL)
+- `web/src/components/CommandPalette.tsx` (modified — added `?limit=200` to documents fetch)

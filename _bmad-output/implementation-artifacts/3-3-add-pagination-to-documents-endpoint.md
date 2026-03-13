@@ -1,6 +1,6 @@
 # Story 3.3: Add Pagination to Documents Endpoint
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -32,42 +32,42 @@ So that page load time stays bounded as the workspace grows beyond 547 documents
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Add `limit` and `offset` extraction to the GET / handler (AC: #1, #2, #4)
-  - [ ] Open `api/src/routes/documents.ts` at the `GET /` handler (around line 104)
-  - [ ] After `const { type, parent_id } = req.query;`, add extraction:
+- [x] Task 1: Add `limit` and `offset` extraction to the GET / handler (AC: #1, #2, #4)
+  - [x] Open `api/src/routes/documents.ts` at the `GET /` handler (around line 104)
+  - [x] After `const { type, parent_id } = req.query;`, add extraction:
     ```typescript
     const limitRaw = parseInt(req.query.limit as string, 10);
     const offsetRaw = parseInt(req.query.offset as string, 10);
     const limit = isNaN(limitRaw) || limitRaw < 1 ? 100 : Math.min(limitRaw, 500);
     const offset = isNaN(offsetRaw) || offsetRaw < 0 ? 0 : offsetRaw;
     ```
-  - [ ] Cap at 500 max to prevent memory abuse (`Math.min(limitRaw, 500)`)
-  - [ ] Default to 100 when param is absent or invalid
+  - [x] Cap at 500 max to prevent memory abuse (`Math.min(limitRaw, 500)`)
+  - [x] Default to 100 when param is absent or invalid
 
-- [ ] Task 2: Append LIMIT/OFFSET to the query (AC: #1, #2, #3, #4)
-  - [ ] After `query += \` ORDER BY position ASC, created_at DESC\``;`, append:
+- [x] Task 2: Append LIMIT/OFFSET to the query (AC: #1, #2, #3, #4)
+  - [x] After `query += \` ORDER BY position ASC, created_at DESC\``;`, append:
     ```typescript
     params.push(limit);
     query += ` LIMIT $${params.length}`;
     params.push(offset);
     query += ` OFFSET $${params.length}`;
     ```
-  - [ ] Confirm both use `$N` parameterized placeholders — no template literal interpolation of user values
+  - [x] Confirm both use `$N` parameterized placeholders — no template literal interpolation of user values
 
-- [ ] Task 3: Verify behaviour with and without params (AC: #1, #2, #3)
-  - [ ] Start API and authenticate
-  - [ ] Test default (no params): `curl ... /api/documents | jq 'length'` → ≤100
-  - [ ] Test with limit: `curl ... "/api/documents?limit=10" | jq 'length'` → exactly 10 (if ≥10 docs exist)
-  - [ ] Test second page: `curl ... "/api/documents?limit=10&offset=10" | jq '.[0].id'` → different from page 1 first id
-  - [ ] Test with type + limit: `curl ... "/api/documents?type=wiki&limit=20" | jq 'length'` → ≤20
+- [x] Task 3: Verify behaviour with and without params (AC: #1, #2, #3)
+  - [x] Start API and authenticate
+  - [x] Test default (no params): `curl ... /api/documents | jq 'length'` → ≤100
+  - [x] Test with limit: `curl ... "/api/documents?limit=10" | jq 'length'` → exactly 10 (if ≥10 docs exist)
+  - [x] Test second page: `curl ... "/api/documents?limit=10&offset=10" | jq '.[0].id'` → different from page 1 first id
+  - [x] Test with type + limit: `curl ... "/api/documents?type=wiki&limit=20" | jq 'length'` → ≤20
 
-- [ ] Task 4: Verify ordering is stable (AC: #3)
-  - [ ] Compare `?limit=10&offset=0` last result id against `?limit=10&offset=10` first result id — must differ
-  - [ ] Confirm ORDER BY clause is `position ASC, created_at DESC` (stable for pagination)
+- [x] Task 4: Verify ordering is stable (AC: #3)
+  - [x] Compare `?limit=10&offset=0` last result id against `?limit=10&offset=10` first result id — must differ
+  - [x] Confirm ORDER BY clause is `position ASC, created_at DESC` (stable for pagination)
 
-- [ ] Task 5: Run unit tests (AC: #5)
-  - [ ] `cd /workspace && pnpm test`
-  - [ ] Confirm only the 6 pre-existing `auth.test.ts` failures remain
+- [x] Task 5: Run unit tests (AC: #5)
+  - [x] `cd /workspace && pnpm test`
+  - [x] Confirm only the 6 pre-existing `auth.test.ts` failures remain
 
 ## Dev Notes
 
@@ -145,16 +145,21 @@ fix(api): add limit/offset pagination to GET /api/documents (default LIMIT 100)
 
 ### Agent Model Used
 
-_to be filled in by dev agent_
+claude-sonnet-4-6
 
 ### Debug Log References
 
-_to be filled in by dev agent_
+- Pagination added in same edit as Story 3.2 type-validation guard (both in `documents.ts` `GET /` handler)
+- `params` array type updated from `(string | boolean | null)[]` to `(string | boolean | null | number)[]`
+- LIMIT/OFFSET appended after ORDER BY using `$N` parameterized placeholders
+- Tests: 445 passed, 6 failed (all pre-existing `auth.test.ts` rate-limit failures)
 
 ### Completion Notes List
 
-_to be filled in by dev agent_
+- Default limit: 100; max cap: 500; invalid/absent values fall back to defaults
+- `ORDER BY position ASC, created_at DESC` retained for stable pagination
+- Both LIMIT and OFFSET use parameterized `$N` — no string interpolation
 
 ### File List
 
-- `api/src/routes/documents.ts` (modified — add limit/offset pagination with default LIMIT 100)
+- `api/src/routes/documents.ts` (modified — added limit/offset pagination with default LIMIT 100)

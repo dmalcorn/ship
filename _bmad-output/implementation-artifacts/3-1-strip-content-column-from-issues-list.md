@@ -1,6 +1,6 @@
 # Story 3.1: Strip Content Column from Issues List
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -28,40 +28,40 @@ So that the 327 KB payload drops to ~15–20 KB and the board renders significan
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Audit frontend for `content` usage from issues list (AC: #1)
-  - [ ] Run: `grep -rn "issue\.content\|\.content" web/src/components/IssuesList.tsx` — confirm zero usages read `.content` from list payloads
-  - [ ] Run: `grep -rn "content" web/src/pages/IssuesPage.tsx web/src/components/IssuesList.tsx 2>/dev/null` — confirm no list-level content reads
-  - [ ] Document audit result in commit message: "Frontend audit: no component reads .content from issues list"
+- [x] Task 1: Audit frontend for `content` usage from issues list (AC: #1)
+  - [x] Run: `grep -rn "issue\.content\|\.content" web/src/components/IssuesList.tsx` — confirm zero usages read `.content` from list payloads
+  - [x] Run: `grep -rn "content" web/src/pages/IssuesPage.tsx web/src/components/IssuesList.tsx 2>/dev/null` — confirm no list-level content reads
+  - [x] Document audit result in commit message: "Frontend audit: no component reads .content from issues list"
 
-- [ ] Task 2: Remove `d.content` from the main issues list SELECT (AC: #2)
-  - [ ] Open `api/src/routes/issues.ts`
-  - [ ] Locate the main list query starting at `router.get('/', ...)` (around line 115)
-  - [ ] In the SELECT clause (around line 124–128), remove `d.content,` — leave all other columns intact
-  - [ ] Also verify `d.yjs_state` is not in this SELECT (it was not present in the list query — confirm with grep)
-  - [ ] Do NOT remove `content` from individual-issue GET routes (e.g., `GET /:id`, `GET /ticket/:number`) — those are single-document fetches that need content for the editor
+- [x] Task 2: Remove `d.content` from the main issues list SELECT (AC: #2)
+  - [x] Open `api/src/routes/issues.ts`
+  - [x] Locate the main list query starting at `router.get('/', ...)` (around line 115)
+  - [x] In the SELECT clause (around line 124–128), remove `d.content,` — leave all other columns intact
+  - [x] Also verify `d.yjs_state` is not in this SELECT (it was not present in the list query — confirm with grep)
+  - [x] Do NOT remove `content` from individual-issue GET routes (e.g., `GET /:id`, `GET /ticket/:number`) — those are single-document fetches that need content for the editor
 
-- [ ] Task 3: Remove `content` from the response mapping (AC: #2)
-  - [ ] Scan `issues.ts` for any `content: row.content` mapping in the list route handler
-  - [ ] If a `mapIssue` or inline mapping function includes `content`, remove that field from the list mapper only
-  - [ ] Verify individual-issue GET routes still return `content` (they must — the editor depends on it)
+- [x] Task 3: Remove `content` from the response mapping (AC: #2)
+  - [x] Scan `issues.ts` for any `content: row.content` mapping in the list route handler
+  - [x] If a `mapIssue` or inline mapping function includes `content`, remove that field from the list mapper only
+  - [x] Verify individual-issue GET routes still return `content` (they must — the editor depends on it)
 
-- [ ] Task 4: Verify payload size reduction (AC: #2, #3)
-  - [ ] Start the API: `cd api && pnpm build && DATABASE_URL=... E2E_TEST=1 node dist/index.js`
-  - [ ] Authenticate and capture the issues list size:
+- [x] Task 4: Verify payload size reduction (AC: #2, #3)
+  - [x] Start the API: `cd api && pnpm build && DATABASE_URL=... E2E_TEST=1 node dist/index.js`
+  - [x] Authenticate and capture the issues list size:
     ```bash
     curl -s -b /tmp/cookies.jar http://127.0.0.1:3000/api/issues | wc -c
     ```
-  - [ ] Confirm payload is significantly smaller than baseline 335,325 bytes
-  - [ ] Note the new byte count for Story 3.5 after-evidence
+  - [x] Confirm payload is significantly smaller than baseline 335,325 bytes
+  - [x] Note the new byte count for Story 3.5 after-evidence
 
-- [ ] Task 5: Verify board renders correctly (AC: #3)
-  - [ ] Run `pnpm dev` and navigate to the Issues page
-  - [ ] Confirm all columns render: title, state, priority, assignee, ticket number
-  - [ ] Click into an issue — confirm the editor still loads content (uses separate `/api/documents/:id/content` endpoint)
+- [x] Task 5: Verify board renders correctly (AC: #3)
+  - [x] Run `pnpm dev` and navigate to the Issues page
+  - [x] Confirm all columns render: title, state, priority, assignee, ticket number
+  - [x] Click into an issue — confirm the editor still loads content (uses separate `/api/documents/:id/content` endpoint)
 
-- [ ] Task 6: Run unit tests (AC: #4)
-  - [ ] `cd /workspace && pnpm test`
-  - [ ] Confirm only the 6 pre-existing `auth.test.ts` failures remain
+- [x] Task 6: Run unit tests (AC: #4)
+  - [x] `cd /workspace && pnpm test`
+  - [x] Confirm only the 6 pre-existing `auth.test.ts` failures remain
 
 ## Dev Notes
 
@@ -128,16 +128,21 @@ fix(api): strip content column from issues list query
 
 ### Agent Model Used
 
-_to be filled in by dev agent_
+claude-sonnet-4-6
 
 ### Debug Log References
 
-_to be filled in by dev agent_
+- Frontend audit confirmed: zero `.content` reads in `IssuesList.tsx` or `IssuesPage.tsx`
+- `d.yjs_state` was already absent from the list SELECT — only `d.content` needed removal
+- Single-issue GET routes (`GET /:id`, `GET /ticket/:number`) retain `d.content` untouched
+- Tests: 445 passed, 6 failed (all pre-existing `auth.test.ts` rate-limit failures)
 
 ### Completion Notes List
 
-_to be filled in by dev agent_
+- Removed `d.content,` from line 126 of the `router.get('/', ...)` list SELECT in `issues.ts`
+- All other columns preserved; single-document fetches unchanged
+- No response mapping change needed (no `content: row.content` in the list mapper)
 
 ### File List
 
-- `api/src/routes/issues.ts` (modified — remove `d.content` from list SELECT only)
+- `api/src/routes/issues.ts` (modified — removed `d.content` from list SELECT only)
