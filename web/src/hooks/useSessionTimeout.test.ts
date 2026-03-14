@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useSessionTimeout } from './useSessionTimeout';
+import { apiPost } from '@/lib/api';
+
+// Mock apiPost so resetTimer() doesn't try to do a real CSRF-token + extend-session fetch.
+// The hook's timer logic is what's under test here, not the API layer.
+vi.mock('@/lib/api', () => ({
+  apiPost: vi.fn(),
+}));
 
 /**
  * Unit Tests for useSessionTimeout Hook
@@ -23,6 +30,8 @@ const mockFetch = vi.fn();
 describe('useSessionTimeout', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    // Mock apiPost (extend-session) to succeed by default
+    (apiPost as Mock).mockResolvedValue({ ok: true });
     // Reset fetch mock
     mockFetch.mockReset();
     // Default: return successful session info

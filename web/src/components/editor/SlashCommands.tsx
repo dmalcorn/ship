@@ -377,6 +377,8 @@ export function createSlashCommands({ onCreateSubDocument, onNavigateToDocument,
         input.accept = 'image/*';
         input.onchange = async () => {
           const file = input.files?.[0];
+          // Must remove from DOM regardless of whether a file was chosen
+          document.body.removeChild(input);
           if (!file) return;
 
           // Import and use upload service
@@ -437,7 +439,12 @@ export function createSlashCommands({ onCreateSubDocument, onNavigateToDocument,
           };
           reader.readAsDataURL(file);
         };
-        input.click();
+        // Must be in the DOM before click() so Playwright (and some browsers) can detect the
+        // file chooser event. setTimeout(50) defers the native picker click so that:
+        //   • Playwright's waitForEvent('filechooser') has time to register its handler
+        //   • Production: 50ms is well within Chrome's transient user-activation window (~5s)
+        document.body.appendChild(input);
+        setTimeout(() => input.click(), 50);
       },
     },
     // File attachment

@@ -14,19 +14,15 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('SelectionPersistenceContext', () => {
   describe('useSelectionPersistence', () => {
     it('should throw when used outside provider', () => {
-      // Suppress console.error for this test
+      // Suppress React 18 console.error output for the expected render error
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      // renderHook doesn't allow checking throws directly, so we catch the error
-      let thrownError: Error | null = null;
-      try {
-        renderHook(() => useSelectionPersistence());
-      } catch (error) {
-        thrownError = error as Error;
-      }
-
-      expect(thrownError).not.toBeNull();
-      expect(thrownError?.message).toContain('useSelectionPersistence must be used within a SelectionPersistenceProvider');
+      // In React 18 concurrent mode, errors thrown during rendering propagate
+      // via React's error boundary mechanism. Using expect(...).toThrow() correctly
+      // captures this before React's boundary can swallow it.
+      expect(() => renderHook(() => useSelectionPersistence())).toThrow(
+        'useSelectionPersistence must be used within a SelectionPersistenceProvider'
+      );
 
       spy.mockRestore();
     });
