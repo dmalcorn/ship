@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DetailsExtension } from './DetailsExtension';
+import { DetailsExtension, DetailsSummary, DetailsContent } from './DetailsExtension';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 
@@ -10,10 +10,11 @@ describe('DetailsExtension', () => {
     expect(extension.name).toBe('details');
   });
 
-  it('should be configured as a block node with content', () => {
+  it('should be configured as a block node with structured sub-node content', () => {
     const extension = DetailsExtension;
     expect(extension.config.group).toBe('block');
-    expect(extension.config.content).toBe('block+');
+    // Content model uses two child nodes: summary (title) + content (collapsible body)
+    expect(extension.config.content).toBe('detailsSummary detailsContent');
     expect(extension.config.defining).toBe(true);
   });
 
@@ -54,20 +55,24 @@ describe('DetailsExtension', () => {
   });
 
   it('should work in editor context', () => {
+    // Must include DetailsSummary and DetailsContent so the schema can resolve
+    // the 'detailsSummary detailsContent' content model declared by DetailsExtension
     const editor = new Editor({
-      extensions: [StarterKit, DetailsExtension],
+      extensions: [StarterKit, DetailsExtension, DetailsSummary, DetailsContent],
       content: '<p>Test content</p>',
     });
 
     expect(editor).toBeDefined();
     expect(editor.extensionManager.extensions.some(ext => ext.name === 'details')).toBe(true);
+    expect(editor.extensionManager.extensions.some(ext => ext.name === 'detailsSummary')).toBe(true);
+    expect(editor.extensionManager.extensions.some(ext => ext.name === 'detailsContent')).toBe(true);
 
     editor.destroy();
   });
 
   it('should allow inserting details via command', () => {
     const editor = new Editor({
-      extensions: [StarterKit, DetailsExtension],
+      extensions: [StarterKit, DetailsExtension, DetailsSummary, DetailsContent],
       content: '<p>Test content</p>',
     });
 

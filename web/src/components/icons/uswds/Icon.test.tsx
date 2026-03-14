@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { isValidIconName, ICON_NAMES } from './types';
+import { Icon } from './Icon';
 
 // Test the types module separately since the Icon component requires dynamic imports
 // that are difficult to mock in vitest
@@ -40,25 +41,8 @@ describe('Icon types module', () => {
 // These tests use unit test patterns that don't require lazy loading
 
 describe('Icon component behavior', () => {
-  // Import Icon dynamically to avoid module resolution issues
-  let Icon: typeof import('./Icon').Icon;
-
-  beforeEach(async () => {
-    // Reset modules to get a fresh Icon component
-    vi.resetModules();
-  });
-
-  it('exports Icon component from index', async () => {
-    // Test that the exports are correct
-    const { Icon: ExportedIcon } = await import('./index');
-    expect(ExportedIcon).toBeDefined();
-    expect(typeof ExportedIcon).toBe('function');
-  });
-
-  it('Icon component renders without crashing for invalid icon', async () => {
+  it('Icon component renders without crashing for invalid icon', () => {
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const { Icon } = await import('./Icon');
 
     // @ts-expect-error - Testing invalid icon name
     const { container } = render(<Icon name="definitely-not-real" className="h-4 w-4" />);

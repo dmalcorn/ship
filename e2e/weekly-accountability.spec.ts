@@ -45,7 +45,7 @@ async function getPersonIdForUser(
   apiUrl: string,
   userId: string
 ): Promise<string> {
-  const response = await page.request.get(`${apiUrl}/api/documents?document_type=person`);
+  const response = await page.request.get(`${apiUrl}/api/documents?type=person`);
   expect(response.ok()).toBe(true);
   const docs = await response.json();
   const person = docs.find(

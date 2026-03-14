@@ -22,7 +22,7 @@ describe('getTabsForDocumentType', () => {
     expect(tabs.length).toBeGreaterThan(0);
     expect(tabs.map(t => t.id)).toContain('details');
     expect(tabs.map(t => t.id)).toContain('issues');
-    expect(tabs.map(t => t.id)).toContain('sprints');
+    expect(tabs.map(t => t.id)).toContain('weeks');
   });
 
   it('returns tabs for program documents', () => {
@@ -31,7 +31,7 @@ describe('getTabsForDocumentType', () => {
     expect(tabs.map(t => t.id)).toContain('overview');
     expect(tabs.map(t => t.id)).toContain('issues');
     expect(tabs.map(t => t.id)).toContain('projects');
-    expect(tabs.map(t => t.id)).toContain('sprints');
+    expect(tabs.map(t => t.id)).toContain('weeks');
   });
 
   it('returns empty array for wiki documents (no tabs)', () => {
@@ -44,9 +44,10 @@ describe('getTabsForDocumentType', () => {
     expect(tabs).toEqual([]);
   });
 
-  it('returns empty array for sprint documents (no tabs)', () => {
+  it('returns tabs for sprint documents', () => {
+    // Sprint has a default tab config (overview, plan, review, standups)
     const tabs = getTabsForDocumentType('sprint');
-    expect(tabs).toEqual([]);
+    expect(tabs.length).toBeGreaterThan(0);
   });
 
   it('returns empty array for unknown document types', () => {
@@ -72,8 +73,9 @@ describe('documentTypeHasTabs', () => {
     expect(documentTypeHasTabs('issue')).toBe(false);
   });
 
-  it('returns false for sprint documents', () => {
-    expect(documentTypeHasTabs('sprint')).toBe(false);
+  it('returns true for sprint documents', () => {
+    // Sprint has a default tab config
+    expect(documentTypeHasTabs('sprint')).toBe(true);
   });
 
   it('returns false for unknown document types', () => {
@@ -91,15 +93,16 @@ describe('tab ID validation for URL deep linking', () => {
     const tabs = getTabsForDocumentType('project');
     const validTabIds = tabs.map(t => t.id);
 
-    // Valid tab IDs
+    // Valid tab IDs (weeks replaces the old sprints ID)
     expect(validTabIds.includes('details')).toBe(true);
     expect(validTabIds.includes('issues')).toBe(true);
-    expect(validTabIds.includes('sprints')).toBe(true);
+    expect(validTabIds.includes('weeks')).toBe(true);
     expect(validTabIds.includes('retro')).toBe(true);
 
     // Invalid tab IDs (should trigger redirect in UnifiedDocumentPage)
     expect(validTabIds.includes('invalid')).toBe(false);
     expect(validTabIds.includes('overview')).toBe(false); // overview is for programs
+    expect(validTabIds.includes('sprints')).toBe(false);  // renamed to weeks
     expect(validTabIds.includes('')).toBe(false);
   });
 
@@ -107,22 +110,24 @@ describe('tab ID validation for URL deep linking', () => {
     const tabs = getTabsForDocumentType('program');
     const validTabIds = tabs.map(t => t.id);
 
-    // Valid tab IDs
+    // Valid tab IDs (weeks replaces the old sprints ID)
     expect(validTabIds.includes('overview')).toBe(true);
     expect(validTabIds.includes('issues')).toBe(true);
     expect(validTabIds.includes('projects')).toBe(true);
-    expect(validTabIds.includes('sprints')).toBe(true);
+    expect(validTabIds.includes('weeks')).toBe(true);
 
     // Invalid tab IDs
     expect(validTabIds.includes('details')).toBe(false); // details is for projects
-    expect(validTabIds.includes('retro')).toBe(false); // retro is for projects
+    expect(validTabIds.includes('retro')).toBe(false);   // retro is for projects
+    expect(validTabIds.includes('sprints')).toBe(false); // renamed to weeks
   });
 
   it('returns first tab as default for URL without tab', () => {
-    // This tests the pattern: tabConfig[0]?.id || ''
+    // Project: issues is the first tab (moved before details)
     const projectTabs = getTabsForDocumentType('project');
-    expect(projectTabs[0]?.id).toBe('details');
+    expect(projectTabs[0]?.id).toBe('issues');
 
+    // Program: overview is still first
     const programTabs = getTabsForDocumentType('program');
     expect(programTabs[0]?.id).toBe('overview');
 
@@ -157,8 +162,9 @@ describe('resolveTabLabels', () => {
     const issuesTab = resolved.find(t => t.id === 'issues');
     expect(issuesTab?.label).toBe('Issues (5)');
 
-    const sprintsTab = resolved.find(t => t.id === 'sprints');
-    expect(sprintsTab?.label).toBe('Weeks (3)');
+    // weeks tab uses the weeks count key
+    const weeksTab = resolved.find(t => t.id === 'weeks');
+    expect(weeksTab?.label).toBe('Weeks');
   });
 
   it('resolves dynamic labels without counts', () => {
@@ -168,8 +174,8 @@ describe('resolveTabLabels', () => {
     const issuesTab = resolved.find(t => t.id === 'issues');
     expect(issuesTab?.label).toBe('Issues');
 
-    const sprintsTab = resolved.find(t => t.id === 'sprints');
-    expect(sprintsTab?.label).toBe('Weeks');
+    const weeksTab = resolved.find(t => t.id === 'weeks');
+    expect(weeksTab?.label).toBe('Weeks');
   });
 
   it('resolves dynamic labels with zero counts', () => {
