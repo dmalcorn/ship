@@ -220,6 +220,46 @@ AssertionError: expected [role="listbox"] to contain text "MentionSearchTarget-.
 
 ---
 
+## Fix 4: useSessionTimeout Web Unit Test act() Warnings
+
+**Root cause:** Four tests in `web/src/hooks/useSessionTimeout.test.ts` performed synchronous assertions immediately after `renderHook`, then returned without draining the microtask queue. The hook fires an async `fetch('/api/auth/session')` in a `useEffect` on mount. In these four tests the fetch mock resolves after the test's synchronous assertions, so React's scheduled state update landed outside any `act()` boundary, producing:
+
+```
+Warning: An update to TestComponent inside a test was not wrapped in act(...)
+```
+
+The four affected tests were all synchronous (`() =>`) despite needing to flush async work:
+- `starts with showWarning = false`
+- `starts with timeRemaining = null when not warning`
+- `starts tracking from current time on mount`
+- `registers activity listeners on mount`
+
+**Fix applied (`web/src/hooks/useSessionTimeout.test.ts`):**
+
+Changed each of the four tests from synchronous to `async` and appended `await act(async () => {})` after the assertions to drain the pending microtask queue before the test exits:
+
+```ts
+// Before
+it('starts with showWarning = false', () => {
+  const { result } = renderHook(() => useSessionTimeout(onTimeout));
+  expect(result.current.showWarning).toBe(false);
+});
+
+// After
+it('starts with showWarning = false', async () => {
+  const { result } = renderHook(() => useSessionTimeout(onTimeout));
+  expect(result.current.showWarning).toBe(false);
+  // Drain the async session-info fetch so its state update lands inside act()
+  await act(async () => {});
+});
+```
+
+This pattern checks initial state synchronously (before the fetch resolves — correct behaviour) then flushes the queue so the deferred state update runs inside `act()` before the test exits.
+
+**Result:** 0 `act()` warnings. All 150 web unit tests pass cleanly.
+
+---
+
 ## After Results
 
 ### Unit Test Results (post-fix)
@@ -254,3 +294,4 @@ All 13 pass with 0 retries. The fix eliminated the stale-signal root cause and t
 | E2E session-timeout returnTo failure | 1 | **0** ✅ (assertion updated for 127.0.0.1) |
 | Unit test failures (auth.test.ts) | 6 | **0** ✅ |
 | New meaningful E2E tests | 0 | **3** ✅ (document creation, session expiry, mention search) |
+| Web unit test act() warnings (useSessionTimeout) | 4 | **0** ✅ (flushed async fetch queue with `await act(async () => {})`) |

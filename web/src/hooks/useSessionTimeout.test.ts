@@ -58,21 +58,27 @@ describe('useSessionTimeout', () => {
   });
 
   describe('Initial State', () => {
-    it('starts with showWarning = false', () => {
+    it('starts with showWarning = false', async () => {
       const onTimeout = vi.fn();
       const { result } = renderHook(() => useSessionTimeout(onTimeout));
 
       expect(result.current.showWarning).toBe(false);
+
+      // Drain the async session-info fetch so its state update lands inside act()
+      await act(async () => {});
     });
 
-    it('starts with timeRemaining = null when not warning', () => {
+    it('starts with timeRemaining = null when not warning', async () => {
       const onTimeout = vi.fn();
       const { result } = renderHook(() => useSessionTimeout(onTimeout));
 
       expect(result.current.timeRemaining).toBeNull();
+
+      // Drain the async session-info fetch so its state update lands inside act()
+      await act(async () => {});
     });
 
-    it('starts tracking from current time on mount', () => {
+    it('starts tracking from current time on mount', async () => {
       const now = Date.now();
       const onTimeout = vi.fn();
       const { result } = renderHook(() => useSessionTimeout(onTimeout));
@@ -80,6 +86,9 @@ describe('useSessionTimeout', () => {
       // lastActivity should be within a small margin of now
       expect(result.current.lastActivity).toBeGreaterThanOrEqual(now);
       expect(result.current.lastActivity).toBeLessThanOrEqual(now + 100);
+
+      // Drain the async session-info fetch so its state update lands inside act()
+      await act(async () => {});
     });
   });
 
@@ -506,7 +515,7 @@ describe('useSessionTimeout', () => {
   });
 
   describe('Event Listeners', () => {
-    it('registers activity listeners on mount', () => {
+    it('registers activity listeners on mount', async () => {
       const onTimeout = vi.fn();
       renderHook(() => useSessionTimeout(onTimeout));
 
@@ -526,6 +535,9 @@ describe('useSessionTimeout', () => {
         expect.any(Function),
         expect.objectContaining({ passive: true, capture: true })
       );
+
+      // Drain the async session-info fetch so its state update lands inside act()
+      await act(async () => {});
     });
 
     it('removes activity listeners on unmount', () => {

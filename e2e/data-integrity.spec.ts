@@ -87,7 +87,7 @@ test.describe('Data Integrity - Document Persistence', () => {
     await expect(async () => {
       // Clear editor content and try again
       await editor.click()
-      await page.keyboard.press('Meta+a')
+      await page.keyboard.press('Control+a')
       await page.keyboard.press('Delete')
       await page.waitForTimeout(200)
       await page.keyboard.type('## My Test Heading', { delay: 20 })
