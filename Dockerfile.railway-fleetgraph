@@ -1,0 +1,33 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-workspace.yaml tsconfig.json ./
+COPY fleetgraph/ ./fleetgraph/
+COPY shared/ ./shared/
+
+# Convert to npm workspaces (Railway doesn't have pnpm)
+RUN node -e " \
+  const p = JSON.parse(require('fs').readFileSync('package.json', 'utf8')); \
+  p.workspaces = ['shared', 'fleetgraph']; \
+  delete p.packageManager; \
+  require('fs').writeFileSync('package.json', JSON.stringify(p)); \
+"
+
+# Install deps
+RUN npm install --workspaces --include=dev --ignore-scripts
+
+# Build shared types, then fleetgraph
+RUN npm run build --workspace=shared
+RUN npm run build --workspace=fleetgraph
+
+# Prune dev deps
+RUN npm prune --workspaces --omit=dev
+
+EXPOSE 3001
+ENV NODE_ENV=production
+ENV PORT=3001
+
+WORKDIR /app/fleetgraph
+CMD ["node", "dist/index.js"]
