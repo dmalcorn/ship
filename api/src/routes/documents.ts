@@ -381,6 +381,7 @@ router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
       // Generic properties
       prefix: props.prefix,
       color: props.color,
+      emoji: props.emoji || null,
       // Sprint properties (dates computed from sprint_number + workspace.sprint_start_date)
       status: props.status,
       plan: props.plan,
@@ -1115,6 +1116,7 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
       // Generic properties
       prefix: props.prefix,
       color: props.color,
+      emoji: props.emoji || null,
       // Sprint properties (dates computed from sprint_number + workspace.sprint_start_date)
       status: props.status,
       plan: props.plan,
