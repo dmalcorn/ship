@@ -83,6 +83,7 @@ const updateDocumentSchema = z.object({
   confidence: z.number().min(1).max(10).nullable().optional(),
   ease: z.number().min(1).max(10).nullable().optional(),
   color: z.string().optional(),
+  emoji: z.string().max(10).optional().nullable(),
   owner_id: z.string().uuid().nullable().optional(),
   has_design_review: z.boolean().nullable().optional(),
   design_review_notes: z.string().max(2000).nullable().optional(),
@@ -728,6 +729,7 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
     if (data.confidence !== undefined) topLevelProps.confidence = data.confidence;
     if (data.ease !== undefined) topLevelProps.ease = data.ease;
     if (data.color !== undefined) topLevelProps.color = data.color;
+    if (data.emoji !== undefined) topLevelProps.emoji = data.emoji;
     if (data.owner_id !== undefined) topLevelProps.owner_id = data.owner_id;
     // RACI fields for projects
     if (data.accountable_id !== undefined) topLevelProps.accountable_id = data.accountable_id;
