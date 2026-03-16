@@ -187,8 +187,8 @@ export const test = base.extend<
         });
 
         // Wait for server to be ready
-        const apiUrl = `http://127.0.0.1:${port}`;
-        await waitForServer(`${apiUrl}/health`, 45000);
+        const apiUrl = `http://localhost:${port}`;
+        await waitForServer(`${apiUrl}/health`, 30000);
         if (debug) console.log(`${workerTag} API server ready at ${apiUrl}`);
 
         await use({ url: apiUrl, process: proc });
@@ -228,7 +228,7 @@ export const test = base.extend<
 
       // Use vite preview instead of vite dev - much lighter weight
       // We pass the API port via env var so vite.config.ts can set up the proxy
-      const proc = spawn('npx', ['vite', 'preview', '--port', String(port), '--host', '127.0.0.1', '--strictPort'], {
+      const proc = spawn('npx', ['vite', 'preview', '--port', String(port), '--strictPort', '--host', '127.0.0.1'], {
         cwd: path.join(PROJECT_ROOT, 'web'),
         env: {
           ...process.env,
@@ -251,8 +251,8 @@ export const test = base.extend<
           }
         });
 
-        const webUrl = `http://127.0.0.1:${port}`;
-        await waitForServer(webUrl, 45000); // Increased: first request can take ~14s on this env
+        const webUrl = `http://localhost:${port}`;
+        await waitForServer(webUrl, 30000); // Preview starts much faster than dev
         if (debug) console.log(`${workerTag} Vite preview server ready at ${webUrl}`);
 
         await use({ url: webUrl, process: proc });
