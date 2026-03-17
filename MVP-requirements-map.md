@@ -42,8 +42,8 @@ The graph runs on a 3-minute cron cycle via `node-cron` in `fleetgraph/src/index
 - LangSmith tracing is auto-enabled via `LANGSMITH_TRACING=true` environment variable
 - All Ship API calls are wrapped with `traceable()` from `langsmith/traceable` in `fleetgraph/src/utils/ship-api.ts`
 - Two shared trace links demonstrating different execution paths:
-  1. **Proactive findings detected:** [LangSmith Trace](https://smith.langchain.com/public/76fc750d-52d4-4713-9b7d-57cc56a55bdb/r) — proactive graph with 4 parallel fetch nodes + `analyze_health`
-  2. **On-demand analysis:** [LangSmith Trace](https://smith.langchain.com/public/be1389ea-5730-4162-acf3-94e06f90984c/r) — on-demand graph with 3 parallel fetch nodes + `analyze_context`
+  1. **Proactive findings detected:** [LangSmith Trace](https://smith.langchain.com/public/2418d5cb-4c21-4d20-a3db-3d5c5be71761/r) — proactive graph with 4 parallel fetch nodes + `analyze_health`
+  2. **On-demand analysis:** [LangSmith Trace](https://smith.langchain.com/public/897a737f-cac3-4c83-a8f6-e05de855c1cf/r) — on-demand graph with 3 parallel fetch nodes + `analyze_context`
 
 ---
 
@@ -161,7 +161,7 @@ Both proactive and on-demand graphs route through the confirmation gate when fin
 | File | Required | Status |
 |------|----------|--------|
 | PRESEARCH.md | Completed pre-search checklist | Satisfied — `gauntlet_docs/PRESEARCH.md` |
-| FLEETGRAPH.md | All sections filled in | Satisfied (trace links pending) |
+| FLEETGRAPH.md | All sections filled in | Satisfied |
 
 ### FLEETGRAPH.md Section Completion
 
@@ -171,7 +171,7 @@ Both proactive and on-demand graphs route through the confirmation gate when fin
 | Graph Diagram | MVP | Complete |
 | Use Cases | MVP | Complete (7 use cases, exceeds 5 minimum) |
 | Trigger Model | MVP | Complete |
-| Test Cases | Early Submission | Complete (trace links pending capture) |
+| Test Cases | Early Submission | Complete |
 | Architecture Decisions | Early Submission | Complete |
 | Cost Analysis | Final Submission | Complete |
 

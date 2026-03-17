@@ -242,8 +242,8 @@ At minimum 2 distinct execution paths demonstrated:
 
 | Execution Path | Description | LangSmith Trace |
 |---------------|-------------|-----------------|
-| **Findings detected** | Proactive run that detected quality gaps (unassigned issues, missing sprints, etc.) | [LangSmith Trace](https://smith.langchain.com/public/76fc750d-52d4-4713-9b7d-57cc56a55bdb/r) |
-| **On-demand analysis** | On-demand chat run scoped to sprint context — different graph topology (3 fetch nodes, `analyze_context`) | [LangSmith Trace](https://smith.langchain.com/public/be1389ea-5730-4162-acf3-94e06f90984c/r) |
+| **Findings detected** | Proactive run that detected quality gaps (unassigned issues, missing sprints, etc.) | [LangSmith Trace](https://smith.langchain.com/public/2418d5cb-4c21-4d20-a3db-3d5c5be71761/r) |
+| **On-demand analysis** | On-demand chat run scoped to sprint context — different graph topology (3 fetch nodes, `analyze_context`) | [LangSmith Trace](https://smith.langchain.com/public/897a737f-cac3-4c83-a8f6-e05de855c1cf/r) |
 
 > Both traces are from runs against real Ship data. The two graphs produce visibly different execution paths in LangSmith: the proactive graph uses 4 parallel fetch nodes and `analyze_health`, while the on-demand graph uses 3 parallel fetch nodes and `analyze_context`.
 

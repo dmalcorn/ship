@@ -11,7 +11,7 @@ export function isInterruptedResult(result: Record<string, unknown>): boolean {
  */
 export async function extractInterruptPayloadFromState(
   graph: { getState: (config: { configurable: { thread_id: string } }) => Promise<{
-    tasks?: Array<{ interrupts?: Array<{ value: unknown }> }>;
+    tasks?: Array<{ interrupts?: Array<{ value?: unknown }> }>;
   }> },
   config: { configurable: { thread_id: string } }
 ): Promise<Record<string, unknown> | null> {
