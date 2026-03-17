@@ -9,21 +9,28 @@ const model = new ChatAnthropic({
 });
 
 const FindingSchema = z.object({
-  id: z.string().describe("Unique identifier for this finding"),
-  severity: z.enum(["info", "warning", "critical"]),
-  title: z.string().describe("Short title for the finding"),
-  description: z.string().describe("Detailed explanation"),
-  affectedDocumentId: z.string().describe("ID of the affected document"),
-  affectedDocumentTitle: z.string().describe("Title of the affected document"),
-  suggestedAction: z.string().describe("What should be done about this"),
+  id: z.string().describe("Unique finding identifier, e.g. finding-1"),
+  severity: z
+    .enum(["info", "warning", "critical"])
+    .describe("Finding severity level"),
+  title: z.string().describe("Short finding title"),
+  description: z.string().describe("Detailed finding description"),
+  evidence: z
+    .string()
+    .describe(
+      "Specific evidence: issue IDs, sprint names, timestamps, titles"
+    ),
+  recommendation: z
+    .string()
+    .describe("Actionable recommendation to resolve this finding"),
 });
 
 const AnalysisOutputSchema = z.object({
-  findings: z.array(FindingSchema),
-  summary: z.string().describe("Overall health summary"),
+  findings: z.array(FindingSchema).describe("Array of detected quality issues"),
+  summary: z.string().describe("Overall project health summary"),
 });
 
-function determineSeverity(
+export function determineSeverity(
   findings: Finding[]
 ): "clean" | "info" | "warning" | "critical" {
   if (findings.length === 0) return "clean";
@@ -34,79 +41,114 @@ function determineSeverity(
 
 /**
  * Analyze project health — LLM reasons about issues, sprint, team data.
- * Produces structured findings with severity levels.
+ * Produces structured findings with severity levels across 7 detection categories.
  */
 export async function analyzeHealth(
   state: FleetGraphStateType
 ): Promise<Partial<FleetGraphStateType>> {
-  // If all fetches failed, skip LLM and report degraded
-  if (state.errors.length > 0 && state.issues.length === 0) {
-    console.log("[analyze_health] all data sources failed, skipping LLM");
+  // If ALL data sources are empty, skip LLM — nothing to analyze
+  const hasAnyData =
+    state.issues.length > 0 ||
+    state.sprintData !== null ||
+    state.teamGrid !== null ||
+    state.standupStatus !== null;
+
+  if (!hasAnyData) {
+    console.log("[analyze_health] no data available from any source, skipping LLM");
     return {
       findings: [],
       severity: "clean",
       errors: [
-        ...state.errors,
         "analyze_health: no data available for analysis",
       ],
     };
   }
 
-  // Summarize issues — only send non-done issues to keep context manageable
-  const activeIssues = state.issues
-    .filter((issue: Record<string, unknown>) => {
-      const props = issue.properties as Record<string, unknown> | undefined;
-      const status = props?.status as string | undefined;
-      return status !== "done" && status !== "cancelled";
-    })
-    .slice(0, 100); // Cap at 100 to stay within token budget
-
-  const issuesSummary = activeIssues.map(
-    (issue: Record<string, unknown>) => ({
-      id: issue.id,
-      title: issue.title,
-      status: (issue.properties as Record<string, unknown>)?.status,
-      assignee_id: (issue.properties as Record<string, unknown>)?.assignee_id,
-      priority: (issue.properties as Record<string, unknown>)?.priority,
-      updated_at: issue.updated_at,
-      created_at: issue.created_at,
-    })
-  );
-
+  // Issues are already filtered and field-extracted by fetchIssues node.
+  // Just pass them through — no duplicate filtering here.
+  const issuesSummary = state.issues;
   const now = new Date().toISOString();
 
   const prompt = `You are a project health analyst for a project management tool called Ship.
 Today's date: ${now}
 
-Analyze the following project data and identify problems, risks, or items needing attention.
+Analyze the following project data and detect problems across ALL of the categories below.
+Generate a finding for EACH detected problem — do not group multiple problems into one finding.
+Use unique IDs: "finding-1", "finding-2", etc.
 
-Focus on:
-- Stale issues (not updated in >3 days, still in todo/in_progress)
-- Overdue items
-- Unassigned issues in active sprints
-- Workload imbalances (one person has significantly more issues than others)
-- Triage queue aging (items in triage >24h)
+=== DETECTION CATEGORIES ===
 
-ACTIVE ISSUES (${issuesSummary.length} of ${state.issues.length} total — showing non-done/non-cancelled):
-${JSON.stringify(issuesSummary, null, 2)}
+1. UNASSIGNED ISSUES: Find any issues where assignee_id is null, undefined, or empty.
+   - Severity: warning
+   - Evidence: List each issue by ID and title
+   - Recommendation: "Assign an owner to prevent orphaned work"
+
+2. MISSING SPRINT ASSIGNMENT: Find active issues (not done/cancelled) that are not associated with any sprint. Cross-reference the issues list with sprint data — issues that appear in the issues list but not in any sprint's issue list are unscheduled.
+   - Severity: info (or warning if priority is "urgent" or "high")
+   - Evidence: List each issue by ID, title, and priority
+   - Recommendation: "Schedule in current or next sprint to ensure visibility"
+
+3. DUPLICATE ISSUES: Identify issues with identical or very similar titles (fuzzy match — same title with minor variations like case, punctuation, or prefixes).
+   - Severity: warning
+   - Evidence: Group duplicate sets, listing all issue IDs and titles in each set
+   - Recommendation: "Consolidate duplicates to avoid redundant effort"
+
+4. EMPTY ACTIVE SPRINTS: Check if any active sprint has zero issues assigned to it.
+   - Severity: critical
+   - Evidence: Sprint name/ID
+   - Recommendation: "Either assign issues to this sprint or close it — empty sprints indicate process breakdown"
+
+5. MISSING TICKET NUMBERS: Check issue titles for ticket number conventions. Issues should have a recognizable prefix pattern (e.g., PROJ-123, #123, or similar). Only flag this if SOME issues follow the convention and others don't (inconsistency). If NO issues have ticket numbers, the project may not use that convention — do not flag.
+   - Severity: info
+   - Evidence: List issue titles that lack ticket number prefixes
+   - Recommendation: "Add ticket number prefix for traceability and cross-referencing"
+
+6. UNOWNED SECURITY ISSUES: Find issues with security-related keywords in their title (security, vulnerability, CVE, auth, authentication, authorization, XSS, injection, CSRF) that have no assignee_id.
+   - Severity: critical
+   - Evidence: List issue IDs, titles, and the security keyword found
+   - Recommendation: "Assign an owner immediately — unowned security work creates unacceptable risk"
+
+7. UNSCHEDULED HIGH-PRIORITY WORK: Find issues with priority "urgent" or "high" that are not assigned to any sprint.
+   - Severity: warning
+   - Evidence: List issue IDs, titles, and priority levels
+   - Recommendation: "Schedule in current or next sprint to prevent high-priority work from slipping"
+
+=== PARTIAL DATA HANDLING ===
+
+IMPORTANT: Only analyze data categories that were successfully fetched.
+- If the issues array is empty, do NOT produce any issue-related findings.
+- If sprint data is null/missing, do NOT produce sprint-related findings (categories 2, 4, 7).
+- If team data is null/missing, do NOT produce team-related findings.
+- If standup data is null/missing, do NOT produce standup-related findings.
+Never infer or hallucinate findings about data you did not receive.
+
+=== PROJECT DATA ===
+
+ACTIVE ISSUES (${issuesSummary.length} total — already filtered to non-done/non-cancelled):
+${JSON.stringify(issuesSummary)}
 
 SPRINT DATA:
-${state.sprintData ? JSON.stringify(state.sprintData, null, 2) : "No active sprint data available"}
+${state.sprintData ? JSON.stringify(state.sprintData) : "No active sprint data available"}
 
 TEAM DATA:
-${state.teamGrid ? JSON.stringify(state.teamGrid, null, 2) : "No team data available"}
+${state.teamGrid ? JSON.stringify(state.teamGrid) : "No team data available"}
 
-Instructions:
-- If everything looks healthy, return an empty findings array with a brief summary.
+STANDUP STATUS:
+${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data available"}
+
+=== INSTRUCTIONS ===
+
+- If everything looks healthy across all categories, return an empty findings array with a brief positive summary.
 - Only surface real problems — not cosmetic issues.
-- Generate unique IDs for each finding using format "finding-1", "finding-2", etc.
-- For affectedDocumentId, use the issue's actual ID from the data.
-- For affectedDocumentTitle, use the issue's actual title from the data.`;
+- Be specific in evidence: cite actual issue IDs, titles, sprint names from the data.
+- One finding per problem detected. Do not combine multiple problems.`;
 
   try {
-    const result = await model.withStructuredOutput(AnalysisOutputSchema, {
-      name: "project_health_analysis",
-    }).invoke([{ role: "user", content: prompt }]);
+    const result = await model
+      .withStructuredOutput(AnalysisOutputSchema, {
+        name: "project_health_analysis",
+      })
+      .invoke([{ role: "user", content: prompt }]);
 
     const findings: Finding[] = result.findings;
     const severity = determineSeverity(findings);
@@ -140,13 +182,8 @@ export async function analyzeContext(
       ? String(lastMessage.content)
       : "Summarize the current state";
 
-  const activeIssues = state.issues
-    .filter((issue: Record<string, unknown>) => {
-      const props = issue.properties as Record<string, unknown> | undefined;
-      const status = props?.status as string | undefined;
-      return status !== "done" && status !== "cancelled";
-    })
-    .slice(0, 50);
+  // Issues already filtered/extracted by fetchIssues node
+  const issuesSummary = state.issues;
 
   const prompt = `You are a project intelligence assistant for Ship.
 The user is viewing document ${state.documentId} (type: ${state.documentType}).
@@ -155,19 +192,22 @@ Today's date: ${new Date().toISOString()}
 User question: ${userQuery}
 
 Available data:
-- Active issues: ${activeIssues.length} (of ${state.issues.length} total)
-${JSON.stringify(activeIssues.map((i: Record<string, unknown>) => ({ id: i.id, title: i.title, status: (i.properties as Record<string, unknown>)?.status, updated_at: i.updated_at })), null, 2)}
-- Sprint: ${state.sprintData ? "loaded" : "not available"}
-- Team: ${state.teamGrid ? "loaded" : "not available"}
+- Active issues (${issuesSummary.length} total, already filtered to non-done/non-cancelled):
+${JSON.stringify(issuesSummary)}
+- Sprint: ${state.sprintData ? JSON.stringify(state.sprintData) : "not available"}
+- Team: ${state.teamGrid ? JSON.stringify(state.teamGrid) : "not available"}
 
 Analyze the data and answer the user's question with specific, actionable insights.
-If you identify problems, generate findings. Otherwise return an empty findings array.
+If you identify problems, generate findings with evidence (specific issue IDs, titles, sprint names) and recommendations.
+Otherwise return an empty findings array with a summary answering the user's question.
 Generate unique IDs for findings using format "finding-1", "finding-2", etc.`;
 
   try {
-    const result = await model.withStructuredOutput(AnalysisOutputSchema, {
-      name: "context_analysis",
-    }).invoke([{ role: "user", content: prompt }]);
+    const result = await model
+      .withStructuredOutput(AnalysisOutputSchema, {
+        name: "context_analysis",
+      })
+      .invoke([{ role: "user", content: prompt }]);
 
     const findings: Finding[] = result.findings;
     const severity = determineSeverity(findings);

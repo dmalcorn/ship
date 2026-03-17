@@ -8,9 +8,8 @@ export interface Finding {
   severity: "info" | "warning" | "critical";
   title: string;
   description: string;
-  affectedDocumentId: string;
-  affectedDocumentTitle: string;
-  suggestedAction: string;
+  evidence: string;
+  recommendation: string;
 }
 
 /**
@@ -83,6 +82,12 @@ export const FleetGraphState = Annotation.Root({
   proposedActions: Annotation<ProposedAction[]>({
     reducer: (_, next) => next,
     default: () => [],
+  }),
+
+  // --- Human-in-the-loop decision ---
+  humanDecision: Annotation<"confirm" | "dismiss" | null>({
+    reducer: (_, next) => next,
+    default: () => null,
   }),
 
   // --- Error tracking (accumulates across nodes) ---

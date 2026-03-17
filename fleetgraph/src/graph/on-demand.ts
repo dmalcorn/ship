@@ -4,7 +4,7 @@ import { FleetGraphState } from "../state.js";
 import { resolveContext } from "../nodes/context.js";
 import { fetchIssues, fetchSprint, fetchTeam } from "../nodes/fetch.js";
 import { analyzeContext } from "../nodes/reasoning.js";
-import { proposeActions, confirmationGate, logCleanRun } from "../nodes/actions.js";
+import { proposeActions, confirmationGate, logCleanRun, gracefulDegrade } from "../nodes/actions.js";
 
 /**
  * Build the on-demand chat graph.
@@ -24,6 +24,7 @@ export function buildOnDemandGraph() {
     .addNode("propose_actions", proposeActions)
     .addNode("confirmation_gate", confirmationGate)
     .addNode("log_clean_run", logCleanRun)
+    .addNode("graceful_degrade", gracefulDegrade)
 
     .addEdge("__start__", "resolve_context")
 
@@ -39,11 +40,21 @@ export function buildOnDemandGraph() {
 
     // Conditional branching
     .addConditionalEdges("analyze_context", (state) => {
+      // All data sources failed — degrade gracefully
+      if (
+        state.errors.length > 0 &&
+        state.issues.length === 0 &&
+        state.sprintData === null &&
+        state.teamGrid === null
+      ) {
+        return "graceful_degrade";
+      }
       if (state.severity === "clean") return "log_clean_run";
       return "propose_actions";
     })
 
     .addEdge("log_clean_run", END)
+    .addEdge("graceful_degrade", END)
     .addEdge("propose_actions", "confirmation_gate")
     .addEdge("confirmation_gate", END);
 

@@ -9,7 +9,7 @@ export async function proposeActions(
 ): Promise<Partial<FleetGraphStateType>> {
   const actions: ProposedAction[] = state.findings.map((f) => ({
     findingId: f.id,
-    description: f.suggestedAction,
+    description: f.recommendation,
     requiresConfirmation: true,
   }));
 
@@ -19,7 +19,8 @@ export async function proposeActions(
 
 /**
  * Human-in-the-loop confirmation gate.
- * Pauses graph execution and surfaces proposed actions to the user.
+ * Pauses graph execution via interrupt() and surfaces proposed actions to the user.
+ * On resume, records the human decision (confirm or dismiss) in state.
  */
 export async function confirmationGate(
   state: FleetGraphStateType
@@ -37,10 +38,26 @@ export async function confirmationGate(
   });
 
   // Execution resumes here after user responds via Command({ resume: ... })
-  const decision = (userResponse as Record<string, unknown>)?.decision;
-  console.log(`[confirmation_gate] user decision: ${decision}`);
+  const response = userResponse as { decision?: string } | undefined;
+  const decision = response?.decision === "confirm" ? "confirm" : "dismiss";
 
-  return {};
+  if (decision === "confirm") {
+    console.log(
+      `[confirmation_gate] CONFIRMED — ${state.proposedActions.length} action(s) approved`
+    );
+    for (const action of state.proposedActions) {
+      console.log(`  ✓ ${action.findingId}: ${action.description}`);
+    }
+  } else {
+    console.log(
+      `[confirmation_gate] DISMISSED — ${state.proposedActions.length} action(s) rejected`
+    );
+    for (const action of state.proposedActions) {
+      console.log(`  ✗ ${action.findingId}: ${action.description}`);
+    }
+  }
+
+  return { humanDecision: decision };
 }
 
 /**
@@ -49,7 +66,7 @@ export async function confirmationGate(
 export async function logCleanRun(
   state: FleetGraphStateType
 ): Promise<Partial<FleetGraphStateType>> {
-  console.log("[log_clean_run] no issues detected, run complete");
+  console.log("[log_clean_run] No findings — project is healthy");
   return {};
 }
 
@@ -59,11 +76,12 @@ export async function logCleanRun(
 export async function gracefulDegrade(
   state: FleetGraphStateType
 ): Promise<Partial<FleetGraphStateType>> {
-  console.log(
-    `[graceful_degrade] running with ${state.errors.length} errors, limited data`
+  console.error(
+    `[graceful_degrade] All data fetches failed. Skipping analysis. Errors: ${state.errors.join("; ")}`
   );
   return {
     findings: [],
     severity: "clean",
+    proposedActions: [],
   };
 }

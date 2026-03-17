@@ -51,7 +51,14 @@ export function buildProactiveGraph() {
 
     // Conditional branching after analysis
     .addConditionalEdges("analyze_health", (state) => {
-      if (state.errors.length > 0 && state.issues.length === 0) {
+      // All data sources failed — degrade gracefully
+      if (
+        state.errors.length > 0 &&
+        state.issues.length === 0 &&
+        state.sprintData === null &&
+        state.teamGrid === null &&
+        state.standupStatus === null
+      ) {
         return "graceful_degrade";
       }
       if (state.severity === "clean") {
