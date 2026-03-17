@@ -1,0 +1,164 @@
+digraph FleetGraph {
+    rankdir=TB;
+    bgcolor="#1a1a2e";
+    pad=0.5;
+    nodesep=0.6;
+    ranksep=0.8;
+    fontname="Helvetica";
+
+    // Global node styling
+    node [
+        fontname="Helvetica"
+        fontsize=11
+        style="filled,rounded"
+        shape=box
+        penwidth=0
+        margin="0.15,0.08"
+    ];
+
+    edge [
+        fontname="Helvetica"
+        fontsize=9
+        color="#555577"
+        fontcolor="#aaaacc"
+        penwidth=1.5
+        arrowsize=0.7
+    ];
+
+    // Subgraph for Proactive
+    subgraph cluster_proactive {
+        label="Proactive Graph  (3-min cron)";
+        labeljust=l;
+        fontname="Helvetica Bold";
+        fontsize=14;
+        fontcolor="#e0e0ff";
+        color="#333366";
+        style="rounded,dashed";
+        bgcolor="#1e1e38";
+        margin=20;
+
+        // Start node
+        p_start [label="START" shape=circle width=0.5 fixedsize=true fillcolor="#4a4a8a" fontcolor="white" fontsize=9];
+
+        // Context node
+        p_resolve [label="resolve_context" fillcolor="#3d5a80" fontcolor="white"];
+
+        // Fetch nodes (parallel)
+        p_fetch_issues [label="fetch_issues" fillcolor="#2a9d8f" fontcolor="white"];
+        p_fetch_sprint [label="fetch_sprint" fillcolor="#2a9d8f" fontcolor="white"];
+        p_fetch_team [label="fetch_team" fillcolor="#2a9d8f" fontcolor="white"];
+        p_fetch_standups [label="fetch_standups" fillcolor="#2a9d8f" fontcolor="white"];
+
+        // Reasoning node
+        p_analyze [label="analyze_health\n(Claude Sonnet)" fillcolor="#e76f51" fontcolor="white" shape=box];
+
+        // Action nodes
+        p_clean [label="log_clean_run" fillcolor="#264653" fontcolor="#98c1d9"];
+        p_propose [label="propose_actions" fillcolor="#e9c46a" fontcolor="#1a1a2e"];
+        p_gate [label="confirmation_gate\n(HITL interrupt)" fillcolor="#f4a261" fontcolor="#1a1a2e" shape=octagon];
+        p_degrade [label="graceful_degrade" fillcolor="#6c3d3d" fontcolor="#e0a0a0"];
+
+        // End nodes
+        p_end1 [label="END" shape=circle width=0.4 fixedsize=true fillcolor="#4a4a8a" fontcolor="white" fontsize=9];
+        p_end2 [label="END" shape=circle width=0.4 fixedsize=true fillcolor="#4a4a8a" fontcolor="white" fontsize=9];
+        p_end3 [label="END" shape=circle width=0.4 fixedsize=true fillcolor="#4a4a8a" fontcolor="white" fontsize=9];
+
+        // Edges
+        p_start -> p_resolve;
+        p_resolve -> p_fetch_issues;
+        p_resolve -> p_fetch_sprint;
+        p_resolve -> p_fetch_team;
+        p_resolve -> p_fetch_standups;
+
+        p_fetch_issues -> p_analyze;
+        p_fetch_sprint -> p_analyze;
+        p_fetch_team -> p_analyze;
+        p_fetch_standups -> p_analyze;
+
+        p_analyze -> p_degrade [label="errors +\nno data" color="#cc5555" fontcolor="#cc8888"];
+        p_analyze -> p_clean [label="severity =\nclean" color="#55aa55" fontcolor="#88cc88"];
+        p_analyze -> p_propose [label="findings\ndetected" color="#ccaa33" fontcolor="#ccbb66"];
+
+        p_degrade -> p_end1;
+        p_clean -> p_end2;
+        p_propose -> p_gate;
+        p_gate -> p_end3;
+    }
+
+    // Subgraph for On-Demand
+    subgraph cluster_ondemand {
+        label="On-Demand Graph  (HTTP POST /api/fleetgraph/chat)";
+        labeljust=l;
+        fontname="Helvetica Bold";
+        fontsize=14;
+        fontcolor="#e0e0ff";
+        color="#333366";
+        style="rounded,dashed";
+        bgcolor="#1e1e38";
+        margin=20;
+
+        // Start node
+        o_start [label="START" shape=circle width=0.5 fixedsize=true fillcolor="#4a4a8a" fontcolor="white" fontsize=9];
+
+        // Context node
+        o_resolve [label="resolve_context" fillcolor="#3d5a80" fontcolor="white"];
+
+        // Fetch nodes (parallel - no standups)
+        o_fetch_issues [label="fetch_issues" fillcolor="#2a9d8f" fontcolor="white"];
+        o_fetch_sprint [label="fetch_sprint" fillcolor="#2a9d8f" fontcolor="white"];
+        o_fetch_team [label="fetch_team" fillcolor="#2a9d8f" fontcolor="white"];
+
+        // Reasoning node
+        o_analyze [label="analyze_context\n(Claude Sonnet)" fillcolor="#e76f51" fontcolor="white" shape=box];
+
+        // Action nodes
+        o_clean [label="log_clean_run" fillcolor="#264653" fontcolor="#98c1d9"];
+        o_propose [label="propose_actions" fillcolor="#e9c46a" fontcolor="#1a1a2e"];
+        o_gate [label="confirmation_gate\n(HITL interrupt)" fillcolor="#f4a261" fontcolor="#1a1a2e" shape=octagon];
+
+        // End nodes
+        o_end1 [label="END" shape=circle width=0.4 fixedsize=true fillcolor="#4a4a8a" fontcolor="white" fontsize=9];
+        o_end2 [label="END" shape=circle width=0.4 fixedsize=true fillcolor="#4a4a8a" fontcolor="white" fontsize=9];
+
+        // Edges
+        o_start -> o_resolve;
+        o_resolve -> o_fetch_issues;
+        o_resolve -> o_fetch_sprint;
+        o_resolve -> o_fetch_team;
+
+        o_fetch_issues -> o_analyze;
+        o_fetch_sprint -> o_analyze;
+        o_fetch_team -> o_analyze;
+
+        o_analyze -> o_clean [label="severity =\nclean" color="#55aa55" fontcolor="#88cc88"];
+        o_analyze -> o_propose [label="findings\ndetected" color="#ccaa33" fontcolor="#ccbb66"];
+
+        o_clean -> o_end1;
+        o_propose -> o_gate;
+        o_gate -> o_end2;
+    }
+
+    // Legend
+    subgraph cluster_legend {
+        label="Legend";
+        labeljust=l;
+        fontname="Helvetica Bold";
+        fontsize=12;
+        fontcolor="#e0e0ff";
+        color="#333366";
+        style="rounded";
+        bgcolor="#1e1e38";
+        margin=15;
+
+        node [shape=box fontsize=9 width=1.6 height=0.3];
+
+        leg_ctx [label="Context Node" fillcolor="#3d5a80" fontcolor="white"];
+        leg_fetch [label="Fetch Node (parallel)" fillcolor="#2a9d8f" fontcolor="white"];
+        leg_reason [label="Reasoning Node (LLM)" fillcolor="#e76f51" fontcolor="white"];
+        leg_action [label="Action Node" fillcolor="#e9c46a" fontcolor="#1a1a2e"];
+        leg_hitl [label="HITL Gate" fillcolor="#f4a261" fontcolor="#1a1a2e" shape=octagon];
+        leg_error [label="Error/Fallback" fillcolor="#6c3d3d" fontcolor="#e0a0a0"];
+
+        leg_ctx -> leg_fetch -> leg_reason -> leg_action -> leg_hitl -> leg_error [style=invis];
+    }
+}

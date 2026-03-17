@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { background: #0d0d0d; color: #f5f5f5; font-family: system-ui, sans-serif; padding: 40px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; max-width: 800px; }
+  .icon-card { text-align: center; padding: 24px; border: 1px solid #333; border-radius: 12px; }
+  .icon-card:hover { border-color: #005ea2; }
+  .icon-card svg { margin-bottom: 16px; }
+  .icon-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .icon-desc { font-size: 12px; color: #a3a3a3; }
+  h1 { font-size: 20px; margin-bottom: 8px; }
+  p.subtitle { color: #a3a3a3; font-size: 14px; margin-bottom: 32px; }
+  .option { font-size: 11px; color: #005ea2; margin-top: 8px; font-weight: 600; }
+  /* Show them at 24px (actual icon rail size) AND 48px (enlarged for comparison) */
+  .sizes { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 12px; }
+  .size-label { font-size: 10px; color: #666; }
+</style>
+</head>
+<body>
+  <h1>FleetGraph Icon Rail Candidates</h1>
+  <p class="subtitle">Shown on Ship's dark background (#0d0d0d) at 24px (actual) and 40px (enlarged for comparison)</p>
+
+  <div class="grid">
+
+    <!-- Option A: Radar -->
+    <div class="icon-card">
+      <div class="sizes">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/>
+          </svg>
+          <div class="size-label">24px</div>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/>
+          </svg>
+          <div class="size-label">40px</div>
+        </div>
+      </div>
+      <div class="icon-name">Radar</div>
+      <div class="icon-desc">Concentric arcs with sweep line. Signals monitoring & detection.</div>
+      <div class="option">Option A</div>
+    </div>
+
+    <!-- Option A alt: ScanSearch -->
+    <div class="icon-card">
+      <div class="sizes">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="m16 16-1.9-1.9"/>
+          </svg>
+          <div class="size-label">24px</div>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="m16 16-1.9-1.9"/>
+          </svg>
+          <div class="size-label">40px</div>
+        </div>
+      </div>
+      <div class="icon-name">ScanSearch</div>
+      <div class="icon-desc">Scanner frame corners + magnifying glass. Signals finding & inspecting.</div>
+      <div class="option">Option A alt</div>
+    </div>
+
+    <!-- Option B: ShieldCheck -->
+    <div class="icon-card">
+      <div class="sizes">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>
+          </svg>
+          <div class="size-label">24px</div>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>
+          </svg>
+          <div class="size-label">40px</div>
+        </div>
+      </div>
+      <div class="icon-name">ShieldCheck</div>
+      <div class="icon-desc">Shield with checkmark. Signals protection & quality assurance.</div>
+      <div class="option">Option B</div>
+    </div>
+
+    <!-- Option C: Bot -->
+    <div class="icon-card">
+      <div class="sizes">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>
+          </svg>
+          <div class="size-label">24px</div>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>
+          </svg>
+          <div class="size-label">40px</div>
+        </div>
+      </div>
+      <div class="icon-name">Bot</div>
+      <div class="icon-desc">Robot face with antenna. Signals AI agent identity.</div>
+      <div class="option">Option C</div>
+    </div>
+
+    <!-- Option C alt: Sparkles -->
+    <div class="icon-card">
+      <div class="sizes">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/>
+          </svg>
+          <div class="size-label">24px</div>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/>
+          </svg>
+          <div class="size-label">40px</div>
+        </div>
+      </div>
+      <div class="icon-name">Sparkles</div>
+      <div class="icon-desc">4-point star with small cross. Signals AI / magic / intelligence.</div>
+      <div class="option">Option C alt</div>
+    </div>
+
+    <!-- Option D: Network -->
+    <div class="icon-card">
+      <div class="sizes">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>
+          </svg>
+          <div class="size-label">24px</div>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>
+          </svg>
+          <div class="size-label">40px</div>
+        </div>
+      </div>
+      <div class="icon-name">Network</div>
+      <div class="icon-desc">Tree diagram with 3 connected nodes. Signals graph / connections.</div>
+      <div class="option">Option D</div>
+    </div>
+
+    <!-- Option D alt: GitGraph -->
+    <div class="icon-card">
+      <div class="sizes">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="5" cy="6" r="3"/><path d="M5 9v6"/><circle cx="5" cy="18" r="3"/><path d="M12 3v18"/><circle cx="19" cy="6" r="3"/><path d="M16 15.7A9 9 0 0 0 19 9"/>
+          </svg>
+          <div class="size-label">24px</div>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="5" cy="6" r="3"/><path d="M5 9v6"/><circle cx="5" cy="18" r="3"/><path d="M12 3v18"/><circle cx="19" cy="6" r="3"/><path d="M16 15.7A9 9 0 0 0 19 9"/>
+          </svg>
+          <div class="size-label">40px</div>
+        </div>
+      </div>
+      <div class="icon-name">GitGraph</div>
+      <div class="icon-desc">Branching commit graph with circles. Signals version control / graph agent.</div>
+      <div class="option">Option D alt</div>
+    </div>
+
+    <!-- Bonus: ShieldAlert (for consideration) -->
+    <div class="icon-card">
+      <div class="sizes">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/>
+          </svg>
+          <div class="size-label">24px</div>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/>
+          </svg>
+          <div class="size-label">40px</div>
+        </div>
+      </div>
+      <div class="icon-name">ShieldAlert</div>
+      <div class="icon-desc">Shield with exclamation. Signals protective alerting — a "guardian" vibe.</div>
+      <div class="option">Bonus</div>
+    </div>
+
+  </div>
+
+  <div style="margin-top: 32px; padding: 20px; border: 1px solid #333; border-radius: 8px; max-width: 800px;">
+    <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">My recommendation: Radar or ScanSearch</div>
+    <div style="font-size: 13px; color: #a3a3a3; line-height: 1.6;">
+      <strong>Radar</strong> best communicates "monitoring agent that scans your project" — it's distinctive,
+      not used elsewhere in Ship's icon rail, and maps to the Dependabot mental model (automated scanning).
+      <br><br>
+      <strong>ScanSearch</strong> is the simpler, more readable alternative — the scanner frame + magnifying glass
+      is universally understood as "finding things."
+      <br><br>
+      <strong>Avoid Bot/Sparkles</strong> — they signal "AI chatbot" which is exactly the mental model we're trying
+      to avoid. FleetGraph is a monitoring agent, not a conversational assistant.
+    </div>
+  </div>
+</body>
+</html>

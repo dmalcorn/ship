@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FleetGraph UX Design Directions</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111; color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
+
+  /* Navigation */
+  .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: #0d0d0d; border-bottom: 1px solid #333; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+  .nav h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
+  .nav-tabs { display: flex; gap: 4px; overflow-x: auto; }
+  .nav-tab { padding: 6px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; border: 1px solid transparent; white-space: nowrap; color: #a3a3a3; background: transparent; transition: all 0.15s; }
+  .nav-tab:hover { color: #f5f5f5; background: #1a1a1a; }
+  .nav-tab.active { color: #f5f5f5; background: #005ea2; border-color: #005ea2; }
+
+  /* Content */
+  .content { padding-top: 60px; }
+  .direction { display: none; padding: 24px; }
+  .direction.active { display: block; }
+  .direction-header { margin-bottom: 24px; }
+  .direction-header h2 { font-size: 20px; margin-bottom: 4px; }
+  .direction-header p { color: #a3a3a3; font-size: 14px; }
+  .direction-header .tags { display: flex; gap: 6px; margin-top: 8px; }
+  .direction-header .tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #1a1a1a; color: #a3a3a3; border: 1px solid #333; }
+
+  /* Ship Layout Mockup */
+  .ship-layout { display: flex; height: 600px; border: 1px solid #333; border-radius: 8px; overflow: hidden; background: #0d0d0d; position: relative; }
+
+  /* Icon Rail */
+  .icon-rail { width: 48px; min-width: 48px; background: #0a0a0a; border-right: 1px solid #262626; display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; }
+  .rail-icon { width: 36px; height: 36px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; color: #666; transition: all 0.15s; }
+  .rail-icon:hover { color: #a3a3a3; background: #1a1a1a; }
+  .rail-icon.active { color: #f5f5f5; background: #005ea2; }
+  .rail-icon svg { width: 20px; height: 20px; }
+  .rail-icon .badge { position: absolute; top: -2px; right: -2px; min-width: 16px; height: 16px; border-radius: 8px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 4px; color: white; }
+  .badge-amber { background: #f59e0b; }
+  .badge-red { background: #ef4444; }
+  .rail-spacer { flex: 1; }
+
+  /* Sidebar */
+  .sidebar { width: 224px; min-width: 224px; background: #0d0d0d; border-right: 1px solid #262626; display: flex; flex-direction: column; overflow: hidden; }
+  .sidebar-header { padding: 12px; border-bottom: 1px solid #262626; display: flex; align-items: center; justify-content: space-between; }
+  .sidebar-header h3 { font-size: 13px; font-weight: 600; }
+  .sidebar-body { flex: 1; overflow-y: auto; padding: 4px; }
+
+  /* Finding Cards */
+  .finding-card { padding: 10px; border-radius: 6px; border: 1px solid #262626; margin-bottom: 4px; cursor: pointer; transition: all 0.15s; }
+  .finding-card:hover { border-color: #404040; background: #111; }
+  .finding-card.viewing { border-color: #005ea2; background: #005ea2/5; }
+  .fc-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .severity-badge { font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 1px 5px; border-radius: 3px; letter-spacing: 0.5px; }
+  .sev-critical { color: #f87171; background: rgba(248,113,113,0.1); }
+  .sev-warning { color: #fbbf24; background: rgba(251,191,36,0.1); }
+  .sev-info { color: #60a5fa; background: rgba(96,165,250,0.1); }
+  .sev-resolved { color: #34d399; background: rgba(52,211,153,0.1); }
+  .fc-title { font-size: 13px; font-weight: 500; line-height: 1.3; }
+  .fc-desc { font-size: 11px; color: #a3a3a3; line-height: 1.4; margin-top: 2px; }
+  .fc-link { font-size: 11px; color: #005ea2; margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+  .fc-actions { display: flex; gap: 4px; margin-top: 6px; }
+  .fc-btn { font-size: 10px; padding: 3px 8px; border-radius: 4px; border: 1px solid #333; background: transparent; color: #a3a3a3; cursor: pointer; transition: all 0.15s; }
+  .fc-btn:hover { color: #f5f5f5; border-color: #555; }
+  .fc-btn.confirm { color: #34d399; border-color: rgba(52,211,153,0.3); }
+  .fc-btn.confirm:hover { background: rgba(52,211,153,0.1); }
+  .fc-btn.dismiss { color: #666; }
+
+  /* Main Content */
+  .main-content { flex: 1; background: #0d0d0d; display: flex; flex-direction: column; position: relative; }
+  .main-header { padding: 12px 16px; border-bottom: 1px solid #262626; display: flex; align-items: center; gap: 8px; }
+  .main-header h3 { font-size: 14px; font-weight: 500; }
+  .main-body { flex: 1; padding: 24px; overflow-y: auto; }
+  .main-body .placeholder { color: #333; font-size: 13px; text-align: center; margin-top: 100px; }
+
+  /* Properties Sidebar */
+  .props-sidebar { width: 256px; min-width: 256px; background: #0d0d0d; border-left: 1px solid #262626; padding: 12px; }
+  .prop-row { margin-bottom: 12px; }
+  .prop-label { font-size: 11px; color: #666; margin-bottom: 2px; }
+  .prop-value { font-size: 13px; }
+
+  /* Chat Drawer */
+  .chat-drawer { position: absolute; bottom: 16px; right: 16px; width: 360px; max-height: 50%; background: #0d0d0d; border: 1px solid #333; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden; z-index: 10; }
+  .chat-header { padding: 10px 14px; border-bottom: 1px solid #262626; display: flex; align-items: center; justify-content: space-between; }
+  .chat-header h4 { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .chat-header .close { color: #666; cursor: pointer; font-size: 18px; line-height: 1; }
+  .chat-header .close:hover { color: #f5f5f5; }
+  .chat-messages { flex: 1; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .chat-msg { max-width: 85%; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5; }
+  .chat-msg.user { align-self: flex-end; background: rgba(0,94,162,0.2); color: #f5f5f5; }
+  .chat-msg.agent { align-self: flex-start; background: #171717; color: #f5f5f5; }
+  .chat-msg .metric { font-family: monospace; color: #fbbf24; font-weight: 600; }
+  .chat-msg h5 { font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #a3a3a3; text-transform: uppercase; letter-spacing: 0.5px; }
+  .chat-msg ul { margin: 4px 0; padding-left: 16px; }
+  .chat-msg li { margin-bottom: 2px; }
+  .chat-input-area { padding: 10px; border-top: 1px solid #262626; display: flex; gap: 8px; }
+  .chat-input { flex: 1; background: #171717; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; color: #f5f5f5; font-size: 13px; outline: none; }
+  .chat-input:focus { border-color: #005ea2; }
+  .chat-send { background: #005ea2; border: none; border-radius: 8px; padding: 8px 12px; color: white; font-size: 12px; cursor: pointer; font-weight: 600; }
+  .chat-send:hover { background: #0071bc; }
+
+  /* Chat FAB */
+  .chat-fab { position: absolute; bottom: 16px; right: 16px; width: 44px; height: 44px; border-radius: 12px; background: #005ea2; border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,94,162,0.3); transition: all 0.15s; z-index: 10; }
+  .chat-fab:hover { background: #0071bc; transform: scale(1.05); }
+  .chat-fab svg { width: 20px; height: 20px; }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 40px 20px; color: #555; }
+  .empty-state svg { margin-bottom: 12px; color: #333; }
+  .empty-state .empty-title { font-size: 14px; color: #a3a3a3; margin-bottom: 4px; }
+  .empty-state .empty-desc { font-size: 12px; }
+
+  /* Variation-specific styles */
+
+  /* Direction B: Compact density */
+  .compact .finding-card { padding: 6px 8px; }
+  .compact .fc-title { font-size: 12px; }
+  .compact .fc-desc { display: none; }
+  .compact .fc-actions { margin-top: 4px; }
+
+  /* Direction C: Grouped by severity */
+  .severity-group { margin-bottom: 12px; }
+  .severity-group-header { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 8px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+
+  /* Direction D: Actions on hover only */
+  .hover-actions .fc-actions { opacity: 0; height: 0; margin: 0; overflow: hidden; transition: all 0.15s; }
+  .hover-actions .finding-card:hover .fc-actions { opacity: 1; height: auto; margin-top: 6px; }
+
+  /* Direction E: Inline chat (sidebar tab) */
+  .sidebar-tabs { display: flex; border-bottom: 1px solid #262626; }
+  .sidebar-tab { flex: 1; padding: 8px; font-size: 11px; text-align: center; cursor: pointer; color: #666; border-bottom: 2px solid transparent; transition: all 0.15s; }
+  .sidebar-tab:hover { color: #a3a3a3; }
+  .sidebar-tab.active { color: #f5f5f5; border-bottom-color: #005ea2; }
+
+  /* Direction F: Notification-style minimal */
+  .notification-card { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border-radius: 6px; border-bottom: 1px solid #1a1a1a; }
+  .notification-card:hover { background: #111; }
+  .notification-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+  .dot-critical { background: #ef4444; }
+  .dot-warning { background: #f59e0b; }
+  .dot-info { background: #3b82f6; }
+
+  /* Comparison helper */
+  .comparison-note { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 16px; margin-top: 20px; }
+  .comparison-note h4 { font-size: 13px; margin-bottom: 8px; color: #f5f5f5; }
+  .comparison-note ul { padding-left: 20px; }
+  .comparison-note li { font-size: 12px; color: #a3a3a3; margin-bottom: 4px; line-height: 1.5; }
+  .comparison-note .pros { color: #34d399; }
+  .comparison-note .cons { color: #f87171; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <h1>FleetGraph UX Directions</h1>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showDirection('a')">A: Full Cards</div>
+    <div class="nav-tab" onclick="showDirection('b')">B: Compact</div>
+    <div class="nav-tab" onclick="showDirection('c')">C: Grouped</div>
+    <div class="nav-tab" onclick="showDirection('d')">D: Hover Actions</div>
+    <div class="nav-tab" onclick="showDirection('e')">E: Sidebar Chat</div>
+    <div class="nav-tab" onclick="showDirection('f')">F: Notification Dots</div>
+    <div class="nav-tab" onclick="showDirection('chat')">Chat Drawer</div>
+    <div class="nav-tab" onclick="showDirection('empty')">Empty State</div>
+  </div>
+</nav>
+
+<div class="content">
+
+  <!-- DIRECTION A: Full Cards (Recommended) -->
+  <div class="direction active" id="dir-a">
+    <div class="direction-header">
+      <h2>Direction A: Full Finding Cards</h2>
+      <p>Each finding is a self-contained card with severity, title, description, link, and inline actions. Maximum information density per card — the "one-glance comprehension" approach.</p>
+      <div class="tags"><span class="tag">RECOMMENDED</span><span class="tag">GitHub Dependabot pattern</span><span class="tag">One-glance comprehension</span></div>
+    </div>
+    <div class="ship-layout">
+      <div class="icon-rail">
+        <div class="rail-icon" title="Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+        <div class="rail-icon" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="rail-icon" title="Issues"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <div class="rail-icon active" title="FleetGraph">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></svg>
+          <span class="badge badge-amber">5</span>
+        </div>
+        <div class="rail-spacer"></div>
+        <div class="rail-icon" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></div>
+      </div>
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <h3>FleetGraph Findings</h3>
+          <span style="font-size:11px;color:#666;">5 active</span>
+        </div>
+        <div class="sidebar-body">
+          <div class="finding-card">
+            <div class="fc-top"><span class="severity-badge sev-critical">Critical</span></div>
+            <div class="fc-title">Empty active sprint</div>
+            <div class="fc-desc">Sprint 14 has been active for 3 days with zero issues assigned. No work is being tracked.</div>
+            <div class="fc-link">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Sprint 14 — Week of Mar 10
+            </div>
+            <div class="fc-actions">
+              <button class="fc-btn confirm">Populate sprint</button>
+              <button class="fc-btn dismiss">Dismiss</button>
+            </div>
+          </div>
+          <div class="finding-card">
+            <div class="fc-top"><span class="severity-badge sev-warning">Warning</span></div>
+            <div class="fc-title">3 unassigned issues in Sprint 13</div>
+            <div class="fc-desc">AUTH-042, AUTH-045, AUTH-047 have no assignee. Sprint ends in 2 days.</div>
+            <div class="fc-link">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Sprint 13 — Week of Mar 3
+            </div>
+            <div class="fc-actions">
+              <button class="fc-btn confirm">Self-assign all</button>
+              <button class="fc-btn dismiss">Dismiss</button>
+            </div>
+          </div>
+          <div class="finding-card viewing">
+            <div class="fc-top"><span class="severity-badge sev-warning">Warning</span></div>
+            <div class="fc-title">Stale issue: Auth middleware rewrite</div>
+            <div class="fc-desc">No updates for 4 days. Last activity: moved to in_progress on Mar 13.</div>
+            <div class="fc-link">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              AUTH-042 — Auth middleware rewrite
+            </div>
+            <div class="fc-actions">
+              <button class="fc-btn confirm">Update status</button>
+              <button class="fc-btn dismiss">Dismiss</button>
+              <button class="fc-btn" style="color:#666;">Snooze</button>
+            </div>
+          </div>
+          <div class="finding-card">
+            <div class="fc-top"><span class="severity-badge sev-info">Info</span></div>
+            <div class="fc-title">Duplicate issues detected</div>
+            <div class="fc-desc">AUTH-045 and AUTH-039 appear to describe the same bug (session timeout handling).</div>
+            <div class="fc-link">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              AUTH-045, AUTH-039
+            </div>
+            <div class="fc-actions">
+              <button class="fc-btn confirm">Close duplicate</button>
+              <button class="fc-btn dismiss">Dismiss</button>
+            </div>
+          </div>
+          <div class="finding-card">
+            <div class="fc-top"><span class="severity-badge sev-info">Info</span></div>
+            <div class="fc-title">Security issue unowned</div>
+            <div class="fc-desc">SEC-012 (XSS in markdown renderer) has no assignee and no sprint.</div>
+            <div class="fc-link">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              SEC-012 — XSS in markdown renderer
+            </div>
+            <div class="fc-actions">
+              <button class="fc-btn confirm">Self-assign</button>
+              <button class="fc-btn dismiss">Dismiss</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="main-content">
+        <div class="main-header">
+          <span style="color:#fbbf24;">●</span>
+          <h3>AUTH-042 — Auth middleware rewrite</h3>
+          <span style="font-size:11px;color:#666;margin-left:auto;">in_progress</span>
+        </div>
+        <div class="main-body">
+          <div class="placeholder">[ Document editor content area ]</div>
+        </div>
+        <div class="chat-fab" title="Ask FleetGraph">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+      </div>
+      <div class="props-sidebar">
+        <div class="prop-row"><div class="prop-label">Status</div><div class="prop-value">In Progress</div></div>
+        <div class="prop-row"><div class="prop-label">Priority</div><div class="prop-value">High</div></div>
+        <div class="prop-row"><div class="prop-label">Assignee</div><div class="prop-value" style="color:#666;">Unassigned</div></div>
+        <div class="prop-row"><div class="prop-label">Sprint</div><div class="prop-value">Sprint 13</div></div>
+        <div class="prop-row"><div class="prop-label">Last updated</div><div class="prop-value" style="color:#f87171;">4 days ago</div></div>
+      </div>
+    </div>
+    <div class="comparison-note">
+      <h4>Direction A Assessment</h4>
+      <ul>
+        <li class="pros">+ Maximum information per card — true one-glance comprehension</li>
+        <li class="pros">+ Actions always visible — no discovery needed</li>
+        <li class="pros">+ Evidence (description + link) visible without interaction</li>
+        <li class="pros">+ "Viewing" state connects sidebar to main content</li>
+        <li class="cons">- Only ~4 cards visible at once in 224px sidebar</li>
+        <li class="cons">- Heavier visual weight — could feel dense with 10+ findings</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION B: Compact -->
+  <div class="direction" id="dir-b">
+    <div class="direction-header">
+      <h2>Direction B: Compact Density</h2>
+      <p>Minimal cards showing only severity + title + actions. Description hidden — users click through for details. Optimized for scanning many findings quickly.</p>
+      <div class="tags"><span class="tag">High density</span><span class="tag">Scan-optimized</span><span class="tag">10+ findings visible</span></div>
+    </div>
+    <div class="ship-layout">
+      <div class="icon-rail">
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <div class="rail-icon active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></svg><span class="badge badge-amber">8</span></div>
+        <div class="rail-spacer"></div>
+      </div>
+      <div class="sidebar">
+        <div class="sidebar-header"><h3>Findings</h3><span style="font-size:11px;color:#666;">8 active</span></div>
+        <div class="sidebar-body compact">
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-critical">Critical</span><span class="fc-title">Empty active sprint</span></div><div class="fc-actions"><button class="fc-btn confirm">Fix</button><button class="fc-btn dismiss">✕</button></div></div>
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-warning">Warning</span><span class="fc-title">3 unassigned issues</span></div><div class="fc-actions"><button class="fc-btn confirm">Fix</button><button class="fc-btn dismiss">✕</button></div></div>
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-warning">Warning</span><span class="fc-title">Stale: Auth middleware</span></div><div class="fc-actions"><button class="fc-btn confirm">Fix</button><button class="fc-btn dismiss">✕</button></div></div>
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-warning">Warning</span><span class="fc-title">Sprint 13 at risk</span></div><div class="fc-actions"><button class="fc-btn confirm">Fix</button><button class="fc-btn dismiss">✕</button></div></div>
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-warning">Warning</span><span class="fc-title">Missing standup: Marcus</span></div><div class="fc-actions"><button class="fc-btn confirm">Fix</button><button class="fc-btn dismiss">✕</button></div></div>
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-info">Info</span><span class="fc-title">Duplicate issues</span></div><div class="fc-actions"><button class="fc-btn confirm">Fix</button><button class="fc-btn dismiss">✕</button></div></div>
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-info">Info</span><span class="fc-title">Security issue unowned</span></div><div class="fc-actions"><button class="fc-btn confirm">Fix</button><button class="fc-btn dismiss">✕</button></div></div>
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-info">Info</span><span class="fc-title">Triage queue: 3 items >24h</span></div><div class="fc-actions"><button class="fc-btn confirm">Fix</button><button class="fc-btn dismiss">✕</button></div></div>
+        </div>
+      </div>
+      <div class="main-content">
+        <div class="main-header"><h3>Ship — Dashboard</h3></div>
+        <div class="main-body"><div class="placeholder">[ Main content area ]</div></div>
+        <div class="chat-fab" title="Ask FleetGraph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      </div>
+      <div class="props-sidebar"><div style="color:#333;font-size:12px;text-align:center;margin-top:100px;">No document selected</div></div>
+    </div>
+    <div class="comparison-note">
+      <h4>Direction B Assessment</h4>
+      <ul>
+        <li class="pros">+ 8+ findings visible without scrolling</li>
+        <li class="pros">+ Fast scanning — severity + title only</li>
+        <li class="pros">+ Less visual overwhelm with many findings</li>
+        <li class="cons">- Violates "one-glance comprehension" — description hidden</li>
+        <li class="cons">- "Fix" button is vague — what does it do?</li>
+        <li class="cons">- No evidence visible — requires click to understand</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION C: Grouped by severity -->
+  <div class="direction" id="dir-c">
+    <div class="direction-header">
+      <h2>Direction C: Grouped by Severity</h2>
+      <p>Findings organized under collapsible severity headers. Clear visual hierarchy — critical section at top demands attention, info section can be collapsed.</p>
+      <div class="tags"><span class="tag">Severity hierarchy</span><span class="tag">Collapsible groups</span><span class="tag">Scales well</span></div>
+    </div>
+    <div class="ship-layout">
+      <div class="icon-rail">
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <div class="rail-icon active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></svg><span class="badge badge-red">5</span></div>
+        <div class="rail-spacer"></div>
+      </div>
+      <div class="sidebar">
+        <div class="sidebar-header"><h3>FleetGraph Findings</h3><span style="font-size:11px;color:#666;">5 active</span></div>
+        <div class="sidebar-body">
+          <div class="severity-group">
+            <div class="severity-group-header" style="color:#f87171;">▾ Critical <span style="font-size:10px;color:#666;font-weight:400;">(1)</span></div>
+            <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-critical">Critical</span></div><div class="fc-title">Empty active sprint</div><div class="fc-desc">Sprint 14 — 3 days with zero issues</div><div class="fc-actions"><button class="fc-btn confirm">Populate</button><button class="fc-btn dismiss">Dismiss</button></div></div>
+          </div>
+          <div class="severity-group">
+            <div class="severity-group-header" style="color:#fbbf24;">▾ Warning <span style="font-size:10px;color:#666;font-weight:400;">(2)</span></div>
+            <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-warning">Warning</span></div><div class="fc-title">3 unassigned issues</div><div class="fc-desc">AUTH-042, AUTH-045, AUTH-047</div><div class="fc-actions"><button class="fc-btn confirm">Self-assign</button><button class="fc-btn dismiss">Dismiss</button></div></div>
+            <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-warning">Warning</span></div><div class="fc-title">Stale: Auth middleware</div><div class="fc-desc">No updates for 4 days</div><div class="fc-actions"><button class="fc-btn confirm">Update</button><button class="fc-btn dismiss">Dismiss</button></div></div>
+          </div>
+          <div class="severity-group">
+            <div class="severity-group-header" style="color:#60a5fa;">▸ Info <span style="font-size:10px;color:#666;font-weight:400;">(2)</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="main-content">
+        <div class="main-header"><h3>Ship — Dashboard</h3></div>
+        <div class="main-body"><div class="placeholder">[ Main content area ]</div></div>
+        <div class="chat-fab" title="Ask FleetGraph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      </div>
+      <div class="props-sidebar"><div style="color:#333;font-size:12px;text-align:center;margin-top:100px;">No document selected</div></div>
+    </div>
+    <div class="comparison-note">
+      <h4>Direction C Assessment</h4>
+      <ul>
+        <li class="pros">+ Clear visual hierarchy — critical floats to top</li>
+        <li class="pros">+ Collapsible groups scale well for 10+ findings</li>
+        <li class="pros">+ Info section can be hidden to reduce noise</li>
+        <li class="pros">+ Badge turns red when critical findings exist</li>
+        <li class="cons">- Group headers consume vertical space</li>
+        <li class="cons">- Extra interaction to expand/collapse groups</li>
+        <li class="cons">- With 1-2 findings per group, headers feel overhead-y</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION D: Hover Actions -->
+  <div class="direction" id="dir-d">
+    <div class="direction-header">
+      <h2>Direction D: Actions on Hover</h2>
+      <p>Full card information visible, but action buttons only appear on hover. Cleaner default state with less visual noise — actions surface when you focus on a specific card.</p>
+      <div class="tags"><span class="tag">Clean default state</span><span class="tag">Progressive disclosure</span><span class="tag">Less visual noise</span></div>
+    </div>
+    <div class="ship-layout">
+      <div class="icon-rail">
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <div class="rail-icon active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></svg><span class="badge badge-amber">5</span></div>
+        <div class="rail-spacer"></div>
+      </div>
+      <div class="sidebar">
+        <div class="sidebar-header"><h3>FleetGraph Findings</h3><span style="font-size:11px;color:#666;">5 active</span></div>
+        <div class="sidebar-body hover-actions">
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-critical">Critical</span></div><div class="fc-title">Empty active sprint</div><div class="fc-desc">Sprint 14 — 3 days with zero issues assigned</div><div class="fc-link"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Sprint 14</div><div class="fc-actions"><button class="fc-btn confirm">Populate sprint</button><button class="fc-btn dismiss">Dismiss</button></div></div>
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-warning">Warning</span></div><div class="fc-title">3 unassigned issues in Sprint 13</div><div class="fc-desc">AUTH-042, AUTH-045, AUTH-047 — sprint ends in 2 days</div><div class="fc-link"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Sprint 13</div><div class="fc-actions"><button class="fc-btn confirm">Self-assign all</button><button class="fc-btn dismiss">Dismiss</button></div></div>
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-warning">Warning</span></div><div class="fc-title">Stale issue: Auth middleware</div><div class="fc-desc">No updates for 4 days</div><div class="fc-link"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>AUTH-042</div><div class="fc-actions"><button class="fc-btn confirm">Update status</button><button class="fc-btn dismiss">Dismiss</button></div></div>
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-info">Info</span></div><div class="fc-title">Duplicate issues detected</div><div class="fc-desc">AUTH-045 and AUTH-039 — same bug</div><div class="fc-link"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>AUTH-045, AUTH-039</div><div class="fc-actions"><button class="fc-btn confirm">Close duplicate</button><button class="fc-btn dismiss">Dismiss</button></div></div>
+          <div class="finding-card"><div class="fc-top"><span class="severity-badge sev-info">Info</span></div><div class="fc-title">Security issue unowned</div><div class="fc-desc">SEC-012 — no assignee, no sprint</div><div class="fc-link"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>SEC-012</div><div class="fc-actions"><button class="fc-btn confirm">Self-assign</button><button class="fc-btn dismiss">Dismiss</button></div></div>
+        </div>
+      </div>
+      <div class="main-content">
+        <div class="main-header"><h3>Ship — Dashboard</h3></div>
+        <div class="main-body"><div class="placeholder">[ Hover over finding cards to see actions appear ]</div></div>
+        <div class="chat-fab" title="Ask FleetGraph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      </div>
+      <div class="props-sidebar"><div style="color:#333;font-size:12px;text-align:center;margin-top:100px;">No document selected</div></div>
+    </div>
+    <div class="comparison-note">
+      <h4>Direction D Assessment</h4>
+      <ul>
+        <li class="pros">+ Cleaner default state — less visual clutter</li>
+        <li class="pros">+ Full info still visible (description + link)</li>
+        <li class="pros">+ More cards visible (no action button space at rest)</li>
+        <li class="cons">- Actions are hidden — discoverability suffers</li>
+        <li class="cons">- "Act faster than ignore" principle harder to achieve if actions aren't visible</li>
+        <li class="cons">- Accessibility concern — hover-only interactions are problematic for keyboard users</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION E: Sidebar Chat Tab -->
+  <div class="direction" id="dir-e">
+    <div class="direction-header">
+      <h2>Direction E: Chat as Sidebar Tab</h2>
+      <p>Instead of a floating drawer, chat lives as a second tab in the FleetGraph sidebar. "Findings" and "Chat" are tabs — user switches between them. No overlay, no floating button.</p>
+      <div class="tags"><span class="tag">Alternative chat placement</span><span class="tag">No overlay</span><span class="tag">Integrated sidebar</span></div>
+    </div>
+    <div class="ship-layout">
+      <div class="icon-rail">
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <div class="rail-icon active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></svg><span class="badge badge-amber">5</span></div>
+        <div class="rail-spacer"></div>
+      </div>
+      <div class="sidebar">
+        <div class="sidebar-tabs">
+          <div class="sidebar-tab" style="color:#666;">Findings (5)</div>
+          <div class="sidebar-tab active">Chat</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="padding:8px 10px;font-size:11px;color:#666;border-bottom:1px solid #1a1a1a;">Context: Sprint 13 — Week of Mar 3</div>
+          <div style="flex:1;padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+            <div class="chat-msg user">Is this sprint on track?</div>
+            <div class="chat-msg agent">
+              <h5>Sprint 13 Analysis</h5>
+              <p>Completion: <span class="metric">42%</span> with <span class="metric">2 days</span> remaining</p>
+              <ul>
+                <li><span class="metric">4</span> issues unstarted</li>
+                <li><span class="metric">3</span> issues unassigned</li>
+                <li>Below historical velocity by <span class="metric">35%</span></li>
+              </ul>
+              <p style="margin-top:6px;color:#fbbf24;font-size:12px;">⚠ Recommend scope reduction or deadline extension</p>
+            </div>
+          </div>
+          <div class="chat-input-area">
+            <input class="chat-input" placeholder="Ask about this sprint..." />
+            <button class="chat-send">Send</button>
+          </div>
+        </div>
+      </div>
+      <div class="main-content">
+        <div class="main-header"><h3>Sprint 13 — Week of Mar 3</h3><span style="font-size:11px;color:#fbbf24;margin-left:auto;">At Risk</span></div>
+        <div class="main-body"><div class="placeholder">[ Sprint view with issues list ]</div></div>
+      </div>
+      <div class="props-sidebar">
+        <div class="prop-row"><div class="prop-label">Status</div><div class="prop-value">Active</div></div>
+        <div class="prop-row"><div class="prop-label">Completion</div><div class="prop-value" style="color:#fbbf24;">42%</div></div>
+        <div class="prop-row"><div class="prop-label">Days remaining</div><div class="prop-value">2</div></div>
+      </div>
+    </div>
+    <div class="comparison-note">
+      <h4>Direction E Assessment</h4>
+      <ul>
+        <li class="pros">+ No floating overlay — cleaner layout</li>
+        <li class="pros">+ Chat and findings are clearly part of the same FleetGraph agent</li>
+        <li class="pros">+ Familiar tab pattern (Ship already uses tabs in document views)</li>
+        <li class="cons">- Can't see findings and chat simultaneously</li>
+        <li class="cons">- 224px sidebar is very narrow for chat messages</li>
+        <li class="cons">- Chat loses document context when user switches to different icon rail mode</li>
+        <li class="cons">- Doesn't match "embedded in context" requirement — chat should be on the document view, not the sidebar</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION F: Notification dots -->
+  <div class="direction" id="dir-f">
+    <div class="direction-header">
+      <h2>Direction F: Minimal Notification Dots</h2>
+      <p>Ultra-minimal cards with just a colored dot, title, and timestamp. Maximum density, minimum visual weight. Inspired by macOS notification center.</p>
+      <div class="tags"><span class="tag">Ultra-minimal</span><span class="tag">macOS-inspired</span><span class="tag">Maximum density</span></div>
+    </div>
+    <div class="ship-layout">
+      <div class="icon-rail">
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <div class="rail-icon active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></svg><span class="badge badge-amber">5</span></div>
+        <div class="rail-spacer"></div>
+      </div>
+      <div class="sidebar">
+        <div class="sidebar-header"><h3>FleetGraph</h3><span style="font-size:11px;color:#666;">5 findings</span></div>
+        <div class="sidebar-body" style="padding:8px;">
+          <div class="notification-card"><div class="notification-dot dot-critical"></div><div><div style="font-size:12px;font-weight:500;">Empty active sprint</div><div style="font-size:10px;color:#666;">Sprint 14 · 3m ago</div></div></div>
+          <div class="notification-card"><div class="notification-dot dot-warning"></div><div><div style="font-size:12px;font-weight:500;">3 unassigned issues</div><div style="font-size:10px;color:#666;">Sprint 13 · 5m ago</div></div></div>
+          <div class="notification-card"><div class="notification-dot dot-warning"></div><div><div style="font-size:12px;font-weight:500;">Stale: Auth middleware</div><div style="font-size:10px;color:#666;">AUTH-042 · 5m ago</div></div></div>
+          <div class="notification-card"><div class="notification-dot dot-info"></div><div><div style="font-size:12px;font-weight:500;">Duplicate issues detected</div><div style="font-size:10px;color:#666;">AUTH-045, AUTH-039 · 5m ago</div></div></div>
+          <div class="notification-card"><div class="notification-dot dot-info"></div><div><div style="font-size:12px;font-weight:500;">Security issue unowned</div><div style="font-size:10px;color:#666;">SEC-012 · 5m ago</div></div></div>
+        </div>
+      </div>
+      <div class="main-content">
+        <div class="main-header"><h3>Ship — Dashboard</h3></div>
+        <div class="main-body"><div class="placeholder">[ Main content area ]</div></div>
+        <div class="chat-fab" title="Ask FleetGraph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      </div>
+      <div class="props-sidebar"><div style="color:#333;font-size:12px;text-align:center;margin-top:100px;">No document selected</div></div>
+    </div>
+    <div class="comparison-note">
+      <h4>Direction F Assessment</h4>
+      <ul>
+        <li class="pros">+ Maximum density — all findings visible without scrolling</li>
+        <li class="pros">+ Extremely clean, minimal visual weight</li>
+        <li class="pros">+ Good for ambient awareness (just see what exists)</li>
+        <li class="cons">- No description — violates one-glance comprehension</li>
+        <li class="cons">- No inline actions — can't confirm/dismiss without navigating</li>
+        <li class="cons">- No evidence visible — just a notification list, not an actionable panel</li>
+        <li class="cons">- Conflicts with "act faster than ignore" — acting requires more steps</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- CHAT DRAWER -->
+  <div class="direction" id="dir-chat">
+    <div class="direction-header">
+      <h2>Chat Drawer (On-Demand Mode)</h2>
+      <p>The floating chat drawer that appears when the user clicks "Ask FleetGraph" on any document view. Shows context-scoped analysis with structured responses.</p>
+      <div class="tags"><span class="tag">On-demand mode</span><span class="tag">Use cases 6-7</span><span class="tag">Intercom pattern + Notion AI model</span></div>
+    </div>
+    <div class="ship-layout">
+      <div class="icon-rail">
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="rail-icon active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></svg><span class="badge badge-amber">3</span></div>
+        <div class="rail-spacer"></div>
+      </div>
+      <div class="sidebar">
+        <div class="sidebar-header"><h3>Issues</h3></div>
+        <div class="sidebar-body" style="padding:8px;font-size:12px;color:#666;">
+          <div style="padding:6px;border-radius:4px;margin-bottom:2px;cursor:pointer;color:#a3a3a3;">AUTH-040 Login redirect</div>
+          <div style="padding:6px;border-radius:4px;margin-bottom:2px;cursor:pointer;color:#a3a3a3;">AUTH-041 Session timeout</div>
+          <div style="padding:6px;border-radius:4px;margin-bottom:2px;cursor:pointer;background:#005ea2;color:#f5f5f5;">AUTH-042 Auth middleware</div>
+          <div style="padding:6px;border-radius:4px;margin-bottom:2px;cursor:pointer;color:#a3a3a3;">AUTH-043 CSRF tokens</div>
+        </div>
+      </div>
+      <div class="main-content">
+        <div class="main-header"><span style="color:#fbbf24;">●</span><h3>AUTH-042 — Auth middleware rewrite</h3><span style="font-size:11px;color:#666;margin-left:auto;">in_progress · 4 days stale</span></div>
+        <div class="main-body"><div class="placeholder" style="margin-top:40px;">[ Issue editor content ]</div></div>
+        <div class="chat-drawer">
+          <div class="chat-header">
+            <h4>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></svg>
+              FleetGraph · AUTH-042
+            </h4>
+            <span class="close">×</span>
+          </div>
+          <div class="chat-messages">
+            <div class="chat-msg user">What's blocking this issue?</div>
+            <div class="chat-msg agent">
+              <h5>AUTH-042 Analysis</h5>
+              <p><strong>Status:</strong> In progress for <span class="metric">4 days</span> with no updates</p>
+              <p style="margin-top:6px;"><strong>Blocking factors:</strong></p>
+              <ul>
+                <li>No assignee — this issue is <span class="metric">unassigned</span></li>
+                <li>Depends on AUTH-039 (session timeout handling) which is also stale</li>
+                <li>AUTH-047 is waiting on this issue's completion</li>
+              </ul>
+              <p style="margin-top:8px;"><strong>Recommended actions:</strong></p>
+              <ul>
+                <li>Assign to a team member immediately</li>
+                <li>Resolve AUTH-039 dependency first</li>
+                <li>Update status or move to blocked</li>
+              </ul>
+            </div>
+          </div>
+          <div class="chat-input-area">
+            <input class="chat-input" placeholder="Ask about AUTH-042..." />
+            <button class="chat-send">Send</button>
+          </div>
+        </div>
+      </div>
+      <div class="props-sidebar">
+        <div class="prop-row"><div class="prop-label">Status</div><div class="prop-value">In Progress</div></div>
+        <div class="prop-row"><div class="prop-label">Priority</div><div class="prop-value">High</div></div>
+        <div class="prop-row"><div class="prop-label">Assignee</div><div class="prop-value" style="color:#666;">Unassigned</div></div>
+        <div class="prop-row"><div class="prop-label">Sprint</div><div class="prop-value">Sprint 13</div></div>
+      </div>
+    </div>
+    <div class="comparison-note">
+      <h4>Chat Drawer Notes</h4>
+      <ul>
+        <li class="pros">+ Preserves document context — issue is still visible behind the drawer</li>
+        <li class="pros">+ Header shows document scope ("FleetGraph · AUTH-042") — context is clear</li>
+        <li class="pros">+ Structured responses with metrics, not conversational filler</li>
+        <li class="pros">+ Radar icon in header connects chat to the FleetGraph agent identity</li>
+        <li>Note: The "Ask FleetGraph" FAB button only appears on document views (issues, sprints) — not on list views or dashboard</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- EMPTY STATE -->
+  <div class="direction" id="dir-empty">
+    <div class="direction-header">
+      <h2>Empty State: No Findings</h2>
+      <p>What Marcus sees after clearing all findings — the "accomplished" moment. Positive reinforcement that makes clearing findings feel rewarding.</p>
+      <div class="tags"><span class="tag">Emotional design</span><span class="tag">"Clean slate" moment</span></div>
+    </div>
+    <div class="ship-layout">
+      <div class="icon-rail">
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="rail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+        <div class="rail-icon active" style="color:#34d399;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/><path d="M4 6h.01"/><path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/><path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/><path d="M12 18h.01"/><path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/><circle cx="12" cy="12" r="2"/><path d="m13.41 10.59 5.66-5.66"/></svg>
+        </div>
+        <div class="rail-spacer"></div>
+      </div>
+      <div class="sidebar">
+        <div class="sidebar-header"><h3>FleetGraph Findings</h3><span style="font-size:11px;color:#34d399;">All clear</span></div>
+        <div class="sidebar-body">
+          <div class="empty-state">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+            <div class="empty-title">No findings — you're in good shape</div>
+            <div class="empty-desc" style="margin-top:4px;">FleetGraph is monitoring your projects.<br/>Next scan in 2 minutes.</div>
+          </div>
+        </div>
+      </div>
+      <div class="main-content">
+        <div class="main-header"><h3>Ship — Dashboard</h3></div>
+        <div class="main-body"><div class="placeholder">[ Main content area ]</div></div>
+        <div class="chat-fab" title="Ask FleetGraph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      </div>
+      <div class="props-sidebar"><div style="color:#333;font-size:12px;text-align:center;margin-top:100px;">No document selected</div></div>
+    </div>
+    <div class="comparison-note">
+      <h4>Empty State Notes</h4>
+      <ul>
+        <li class="pros">+ ShieldCheck icon in green — "protected" feeling</li>
+        <li class="pros">+ Positive message reinforces the habit loop</li>
+        <li class="pros">+ "Next scan in 2 minutes" shows the agent is still working</li>
+        <li class="pros">+ Radar icon in icon rail turns green (no badge) — ambient "all clear"</li>
+        <li>Note: The green Radar icon is a subtle touch — no badge means no findings, green means healthy</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function showDirection(id) {
+  document.querySelectorAll('.direction').forEach(d => d.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('dir-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

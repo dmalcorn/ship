@@ -1,74 +1,148 @@
-# ShipShape Improvement Initiative
+# FleetGraph — Project Intelligence Agent for Ship
 
-**Goal:** Address all 7 audit categories identified in `gauntlet_docs/ShipShape-fix-plan.md` to meet Phase 2 implementation targets.
+**Goal:** Build and deploy an autonomous AI reasoning agent that monitors Ship project data, surfaces quality gaps, and provides context-scoped analysis — proving that an always-on graph agent changes behavior by making mistakes visible.
 
-Full fix details (root causes, step-by-step fixes, measurement criteria) are in [`gauntlet_docs/ShipShape-fix-plan.md`](gauntlet_docs/ShipShape-fix-plan.md).
-
----
-
-## 7 Categories at a Glance
-
-| # | Category | Severity | Target |
-|---|---|---|---|
-| 1 | Type Safety | Low | Reduce 875 violations → ≤659 (≥25%) |
-| 2 | Bundle Size | **High** | ≥20% initial-load reduction via code splitting |
-| 3 | API Response Time | **High** | ≥20% P95 reduction on ≥2 endpoints |
-| 4 | DB Query Efficiency | Medium | ≥20% query count reduction on ≥1 flow |
-| 5 | Test Coverage | Medium | Fix 3 flaky tests + add 3 meaningful new tests |
-| 6 | Runtime Error Handling | **High** | Fix 3 error handling gaps (≥1 user-facing data loss scenario) |
-| 7 | Accessibility | Medium | Fix all Serious violations on 3 priority pages |
+**Planning docs:** `_bmad-output/planning-artifacts/` (PRD, UX design spec, architecture decisions)
+**Research docs:** `gauntlet_docs/` (PRESEARCH, FleetGraph PRD, technical research, MVP project plan)
 
 ---
 
-## Branch Structure
+## Deadlines
 
-### Infrastructure / Setup
-| Branch | Purpose | Status |
+| Checkpoint | Deadline | Focus |
 |---|---|---|
-| `chore/dev-setup` | Devcontainer config, Claude Code CLI, vite host config, gauntlet docs | Done |
-| `chore/bmad-method` | Install BMAD Method agent framework | Done |
+| Pre-Search | ✅ Complete | Agent responsibility + architecture decisions |
+| MVP | Tuesday, 11:59 PM | Running graph, tracing, use cases defined |
+| Early Submission | Friday, 11:59 PM | Polish, documentation, deployment |
+| Final Submission | Sunday, 11:59 PM | All deliverables submitted |
 
-### Fix Branches (one per category)
-| Branch | Category | Status |
-|---|---|---|
-| `fix/error-handling` | Cat 6: Runtime error handling (global error middleware, crash guards, UUID validation) | ✅ Done — merged to master |
-| `fix/bundle-size` | Cat 2: Bundle size (devtools gate, lazy emoji picker, manualChunks, dead dep removal) | 🔄 In progress |
-| `fix/api-response-time` | Cat 3: API response time (strip content column, type filter, pagination) | ⏳ Not started — cut from master now |
-| `fix/db-query-efficiency` | Cat 4: DB query efficiency (trgm index, session skip-update, statement_timeout) | ⏳ Not started |
-| `fix/type-safety` | Cat 1: Type safety (Express augmentation, DB row types, yjsConverter, tsconfig) | ⏳ Not started |
-| `fix/test-coverage` | Cat 5: Test coverage (fix rate-limiter contamination in auth.test.ts, fix returnTo assertion, fix E2E flakiness, add 3 critical path tests) | ⏳ Not started — absolute last |
-| `fix/accessibility` | Cat 7: Accessibility (color contrast, skip-nav link, Radix dialog) | ⏳ Not started |
+---
 
-### Recommended implementation order
+## FleetGraph Package
 
-**PRE-SPRINT:** ✅ Complete — all baselines captured in `gauntlet_docs/baselines.md`.
+FleetGraph lives at `fleetgraph/` as a standalone Node.js/TypeScript package (not a pnpm workspace member).
 
-```
-Track A (sequential — middleware chain dependency):
-  Cat 6 (error-handling) ✅ → MERGE TO MASTER ← DO THIS NEXT → Cat 3 (api-response-time)
+```bash
+# Development
+cd fleetgraph && npm run dev      # tsx watch mode
 
-Track B (isolated — run parallel with Track A after pre-sprint):
-  Cat 4 (db-query-efficiency) → Cat 2 (bundle-size)
+# Build
+cd fleetgraph && npm run build    # TypeScript compile to dist/
 
-After all above merged:
-  Cat 1 (type-safety)   ← touches most files, second to last
-  Cat 7 (accessibility) ← DOM changes, verify Playwright selectors after
-  Cat 5 (test-coverage) ← absolute last, validates all other fixes
+# Start (production)
+cd fleetgraph && npm start        # node dist/index.js
+
+# Type check
+cd fleetgraph && npm run type-check
 ```
 
-**⚠️ Next action:** Cut `fix/api-response-time` from `master` (Cat 6 is now merged). Cat 3 and Cat 4/Cat 2 can now all be started in parallel from master.
+### Environment Variables (required)
 
-**Rationale:** Cat 4 and Cat 2 are purely additive/isolated (DB indexes + build config) with zero regression risk, making them the safest fast wins. Cat 1 is last among code changes because it touches the most files. Cat 5 is absolute last so the 3 new meaningful tests can validate behavior introduced by all other fixes.
+```
+ANTHROPIC_API_KEY=sk-ant-...
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_...
+FLEETGRAPH_API_TOKEN=ship_...     # Ship API Bearer token
+SHIP_API_URL=https://...          # Ship API base URL
+PORT=3001                         # Express listen port (optional, default 3001)
+LANGCHAIN_CALLBACKS_BACKGROUND=true  # Recommended for non-serverless
+```
+
+### Source Structure
+
+```
+fleetgraph/
+├── src/
+│   ├── index.ts              # Express server + cron scheduler + endpoints
+│   ├── state.ts              # FleetGraphState annotation (shared state schema)
+│   ├── graph/
+│   │   ├── proactive.ts      # Proactive health-check graph (cron-triggered)
+│   │   └── on-demand.ts      # On-demand chat graph (HTTP-triggered)
+│   ├── nodes/
+│   │   ├── context.ts        # resolve_context node
+│   │   ├── fetch.ts          # fetch_issues, fetch_sprint, fetch_team, fetch_standups
+│   │   ├── reasoning.ts      # analyze_health (proactive), analyze_context (on-demand)
+│   │   └── actions.ts        # propose_actions, confirmation_gate, log_clean_run, graceful_degrade
+│   └── utils/
+│       └── ship-api.ts       # fetchWithRetry + Ship API endpoint wrappers
+├── package.json
+└── tsconfig.json
+```
 
 ---
 
-## Evidence Requirements
+## Graph Architecture
 
-Each fix branch must include before/after proof:
-- **Cat 1**: violation-counting script output
-- **Cat 2**: `rollup-plugin-visualizer` gzip sizes
-- **Cat 3**: `autocannon -c 50` P95 numbers
-- **Cat 4**: `EXPLAIN ANALYZE` + query log counts
-- **Cat 5**: `test-results/summary.json` before/after
-- **Cat 6**: `curl` output showing JSON error (not HTML stack trace)
-- **Cat 7**: `@axe-core/playwright` violation output for 3 pages
+Two compiled LangGraph.js StateGraphs share node functions but wire different topologies:
+
+**Proactive graph** (3-minute cron):
+```
+START → resolve_context → [fetch_issues | fetch_sprint | fetch_team | fetch_standups] (parallel)
+      → analyze_health → clean? → log_clean_run → END
+                       → findings? → propose_actions → confirmation_gate → END
+                       → errors? → graceful_degrade → END
+```
+
+**On-demand graph** (HTTP POST `/api/fleetgraph/chat`):
+```
+START → resolve_context → [fetch_issues | fetch_sprint | fetch_team] (parallel)
+      → analyze_context → clean? → log_clean_run → END
+                        → findings? → propose_actions → confirmation_gate → END
+```
+
+### Key Technical Details
+
+- **LLM:** Claude Sonnet 4.6 via `@langchain/anthropic` ChatAnthropic
+- **Structured output:** Zod schema + `withStructuredOutput()` for typed Finding[] arrays
+- **Checkpointer:** MemorySaver (in-memory) — supports interrupt/resume for HITL gate
+- **Ship API auth:** Bearer token (`FLEETGRAPH_API_TOKEN`), not session cookies
+- **Retry:** `fetchWithRetry` with exponential backoff (2 retries, 10s timeout)
+- **Tracing:** Auto via LangSmith env vars — every node and LLM call traced
+
+---
+
+## FleetGraph API Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/health` | Health check (Railway monitors) |
+| `POST` | `/api/fleetgraph/chat` | On-demand analysis (body: `{ documentId, documentType, message, threadId, workspaceId }`) |
+| `POST` | `/api/fleetgraph/resume` | Human-in-the-loop resume (body: `{ threadId, decision }`) |
+| `POST` | `/api/fleetgraph/analyze` | Manual proactive trigger (body: `{ workspaceId }`) |
+
+---
+
+## MVP Checklist
+
+- [x] Graph running with at least one proactive detection end-to-end
+- [x] LangSmith tracing enabled
+- [ ] Two shared trace links showing different execution paths
+- [ ] FLEETGRAPH.md with Agent Responsibility and Use Cases (5+)
+- [x] Graph outline documented (nodes, edges, branching)
+- [x] At least one human-in-the-loop gate
+- [x] Running against real Ship data
+- [x] Deployed and publicly accessible (Railway)
+- [ ] Trigger model documented and defended
+
+---
+
+## Deployment (Railway)
+
+FleetGraph deploys as a separate Railway service:
+
+- **Build:** `cd fleetgraph && npm run build`
+- **Start:** `cd fleetgraph && npm start`
+- **Health check:** `GET /health`
+- **Port:** 3001
+
+Ship platform (api + web) deploys separately — see `.claude/CLAUDE.md` for Ship deployment commands.
+
+---
+
+## Key Constraints
+
+- **Read-only agent:** FleetGraph never writes to Ship's API or database. All proposed actions require human confirmation.
+- **Real data only:** No mocks in production — all findings from live Ship data.
+- **Ship API is sole data source:** No direct database access.
+- **LangSmith traces are graded artifacts:** Every run must be traced. Different execution paths must be visible.
+- **Cost target:** ~$0.036/run with Sonnet. Token input bounded by filtering + capping issues at 100.
