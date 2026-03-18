@@ -20,6 +20,9 @@
   // Set up pnpm, install deps, migrate, and seed after container creation
   "postCreateCommand": "bash .devcontainer/post-create.sh",
 
+  // Fix Docker socket permissions on every container start (not just creation)
+  "postStartCommand": "sudo chmod 666 /var/run/docker.sock 2>/dev/null || true",
+
   "customizations": {
     "vscode": {
       "extensions": [

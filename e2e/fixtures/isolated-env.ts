@@ -187,8 +187,8 @@ export const test = base.extend<
         });
 
         // Wait for server to be ready
-        const apiUrl = `http://localhost:${port}`;
-        await waitForServer(`${apiUrl}/health`, 30000);
+        const apiUrl = `http://127.0.0.1:${port}`;
+        await waitForServer(`${apiUrl}/health`, 45000);
         if (debug) console.log(`${workerTag} API server ready at ${apiUrl}`);
 
         await use({ url: apiUrl, process: proc });
@@ -251,8 +251,8 @@ export const test = base.extend<
           }
         });
 
-        const webUrl = `http://localhost:${port}`;
-        await waitForServer(webUrl, 30000); // Preview starts much faster than dev
+        const webUrl = `http://127.0.0.1:${port}`;
+        await waitForServer(webUrl, 45000); // Increased: first request can take ~14s in containers
         if (debug) console.log(`${workerTag} Vite preview server ready at ${webUrl}`);
 
         await use({ url: webUrl, process: proc });
