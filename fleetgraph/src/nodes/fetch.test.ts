@@ -6,16 +6,19 @@ const mockGetIssues = vi.fn();
 const mockGetSprintIssues = vi.fn();
 const mockGetTeamGrid = vi.fn();
 const mockGetStandupStatus = vi.fn();
+const mockGetDocument = vi.fn();
+const mockGetDocumentAssociations = vi.fn();
+const mockGetSprint = vi.fn();
 
 vi.mock("../utils/ship-api.js", () => ({
   shipApi: {
     getIssues: (...args: unknown[]) => mockGetIssues(...args),
-    getSprint: vi.fn(),
+    getSprint: (...args: unknown[]) => mockGetSprint(...args),
     getSprintIssues: (...args: unknown[]) => mockGetSprintIssues(...args),
     getTeamGrid: () => mockGetTeamGrid(),
     getStandupStatus: () => mockGetStandupStatus(),
-    getDocument: vi.fn(),
-    getDocumentAssociations: vi.fn(),
+    getDocument: (...args: unknown[]) => mockGetDocument(...args),
+    getDocumentAssociations: (...args: unknown[]) => mockGetDocumentAssociations(...args),
     getIssueHistory: vi.fn(),
   },
 }));
@@ -42,6 +45,7 @@ function makeState(
     severity: "clean",
     proposedActions: [],
     humanDecision: null,
+    contextDocument: null,
     errors: [],
     ...overrides,
   };
@@ -142,6 +146,152 @@ describe("fetchIssues", () => {
     expect(result.issues).toEqual([]);
     expect(result.errors).toEqual([]);
   });
+
+  it("scopes to issue context: fetches viewed issue, sprint siblings, and assignee issues", async () => {
+    // The viewed issue
+    const viewedIssue = {
+      id: "issue-1", title: "Fix login", properties: { status: "in_progress", assignee_id: "user-1", priority: "high" },
+      updated_at: "2026-03-15", created_at: "2026-03-10",
+    };
+    // Context document from resolveContext enrichment
+    const contextDocument = {
+      document: { id: "issue-1", title: "Fix login", document_type: "issue", properties: { status: "in_progress", assignee_id: "user-1" } },
+      associations: [
+        { id: "assoc-1", source_document_id: "issue-1", target_document_id: "sprint-1", relationship_type: "sprint" },
+      ],
+    };
+    // Sprint sibling issues
+    const sprintIssues = [
+      { id: "issue-1", title: "Fix login", properties: { status: "in_progress", assignee_id: "user-1", priority: "high" }, updated_at: "2026-03-15", created_at: "2026-03-10" },
+      { id: "issue-2", title: "Add signup", properties: { status: "todo", assignee_id: "user-2", priority: "medium" }, updated_at: "2026-03-14", created_at: "2026-03-09" },
+      { id: "issue-3", title: "Done task", properties: { status: "done", assignee_id: "user-1", priority: "low" }, updated_at: "2026-03-13", created_at: "2026-03-08" },
+    ];
+    // Assignee's other issues
+    const assigneeIssues = [
+      { id: "issue-4", title: "Other task", properties: { status: "todo", assignee_id: "user-1", priority: "low" }, updated_at: "2026-03-12", created_at: "2026-03-07" },
+    ];
+
+    mockGetDocument.mockResolvedValueOnce(viewedIssue);
+    mockGetSprintIssues.mockResolvedValueOnce(sprintIssues);
+    mockGetIssues.mockResolvedValueOnce(assigneeIssues);
+
+    const result = await fetchIssues(makeState({
+      triggerType: "on-demand",
+      documentId: "issue-1",
+      documentType: "issue",
+      contextDocument,
+    }));
+
+    // Should include: viewed issue (issue-1), sibling (issue-2), and assignee issue (issue-4)
+    // issue-3 is done so filtered out; issue-1 is deduped
+    const ids = result.issues!.map((i: Record<string, unknown>) => i.id);
+    expect(ids).toContain("issue-1");
+    expect(ids).toContain("issue-2");
+    expect(ids).toContain("issue-4");
+    expect(ids).not.toContain("issue-3"); // done - filtered
+    expect(mockGetSprintIssues).toHaveBeenCalledWith("sprint-1");
+  });
+
+  it("scopes to sprint context: fetches all sprint issues", async () => {
+    const sprintIssues = [
+      { id: "issue-1", title: "Task A", properties: { status: "todo", assignee_id: "user-1", priority: "high" }, updated_at: "2026-03-15", created_at: "2026-03-10" },
+      { id: "issue-2", title: "Task B", properties: { status: "in_progress", assignee_id: "user-2", priority: "medium" }, updated_at: "2026-03-14", created_at: "2026-03-09" },
+    ];
+    const contextDocument = {
+      document: { id: "sprint-1", title: "Sprint 5", document_type: "sprint" },
+      associations: [],
+    };
+
+    mockGetSprintIssues.mockResolvedValueOnce(sprintIssues);
+
+    const result = await fetchIssues(makeState({
+      triggerType: "on-demand",
+      documentId: "sprint-1",
+      documentType: "sprint",
+      contextDocument,
+    }));
+
+    expect(result.issues).toHaveLength(2);
+    expect(mockGetSprintIssues).toHaveBeenCalledWith("sprint-1");
+    // Should NOT call generic getIssues
+    expect(mockGetIssues).not.toHaveBeenCalled();
+  });
+
+  it("falls back to generic fetch when on-demand but no contextDocument", async () => {
+    const issues = Array.from({ length: 5 }, (_, i) => ({
+      id: `issue-${i}`, title: `Issue ${i}`, properties: { status: "todo" },
+      updated_at: "2026-03-15", created_at: "2026-03-10",
+    }));
+    mockGetIssues.mockResolvedValueOnce(issues);
+
+    const result = await fetchIssues(makeState({
+      triggerType: "on-demand",
+      documentId: "doc-123",
+      documentType: "issue",
+      contextDocument: null,
+    }));
+
+    expect(result.issues).toHaveLength(5);
+    expect(mockGetIssues).toHaveBeenCalled();
+  });
+
+  it("always includes viewed issue even with no sprint and no assignee", async () => {
+    const viewedIssue = {
+      id: "orphan-1", title: "Orphan issue", properties: { status: "todo" },
+      updated_at: "2026-03-15", created_at: "2026-03-10",
+    };
+    const contextDocument = {
+      document: { id: "orphan-1", title: "Orphan issue", document_type: "issue", properties: {} },
+      associations: [], // No sprint association
+    };
+
+    mockGetDocument.mockResolvedValueOnce(viewedIssue);
+    // No sprint issues call, no assignee issues call
+
+    const result = await fetchIssues(makeState({
+      triggerType: "on-demand",
+      documentId: "orphan-1",
+      documentType: "issue",
+      contextDocument,
+    }));
+
+    expect(result.issues).toHaveLength(1);
+    expect((result.issues![0] as Record<string, unknown>).id).toBe("orphan-1");
+    expect(mockGetDocument).toHaveBeenCalledWith("orphan-1");
+  });
+
+  it("deduplicates issues in scoped fetch", async () => {
+    const contextDocument = {
+      document: { id: "issue-1", title: "Fix login", document_type: "issue", properties: { assignee_id: "user-1" } },
+      associations: [
+        { id: "assoc-1", source_document_id: "issue-1", target_document_id: "sprint-1", relationship_type: "sprint" },
+      ],
+    };
+    // Same issue appears in viewed doc, sprint, and assignee results
+    const viewedIssue = { id: "issue-1", title: "Fix login", properties: { status: "in_progress", assignee_id: "user-1", priority: "high" }, updated_at: "2026-03-15", created_at: "2026-03-10" };
+    const sprintIssues = [
+      { id: "issue-1", title: "Fix login", properties: { status: "in_progress", assignee_id: "user-1", priority: "high" }, updated_at: "2026-03-15", created_at: "2026-03-10" },
+    ];
+    const assigneeIssues = [
+      { id: "issue-1", title: "Fix login", properties: { status: "in_progress", assignee_id: "user-1", priority: "high" }, updated_at: "2026-03-15", created_at: "2026-03-10" },
+    ];
+
+    mockGetDocument.mockResolvedValueOnce(viewedIssue);
+    mockGetSprintIssues.mockResolvedValueOnce(sprintIssues);
+    mockGetIssues.mockResolvedValueOnce(assigneeIssues);
+
+    const result = await fetchIssues(makeState({
+      triggerType: "on-demand",
+      documentId: "issue-1",
+      documentType: "issue",
+      contextDocument,
+    }));
+
+    // Should deduplicate — only one issue-1
+    const ids = result.issues!.map((i: Record<string, unknown>) => i.id);
+    const issue1Count = ids.filter((id: unknown) => id === "issue-1").length;
+    expect(issue1Count).toBe(1);
+  });
 });
 
 describe("fetchSprint", () => {
@@ -194,6 +344,97 @@ describe("fetchSprint", () => {
 
     expect(result.sprintData).toBeNull();
     expect(result.errors).toEqual(["fetch_sprint: HTTP 503"]);
+  });
+
+  it("fetches specific sprint by documentId when documentType is sprint", async () => {
+    const sprint = { id: "sprint-1", title: "Sprint 5", properties: { status: "active" } };
+    const sprintIssues = [{ id: "issue-1", title: "Task A" }];
+    const contextDocument = {
+      document: { id: "sprint-1", title: "Sprint 5", document_type: "sprint" },
+      associations: [],
+    };
+
+    mockGetSprint.mockResolvedValueOnce(sprint);
+    mockGetSprintIssues.mockResolvedValueOnce(sprintIssues);
+
+    const result = await fetchSprint(makeState({
+      triggerType: "on-demand",
+      documentId: "sprint-1",
+      documentType: "sprint",
+      contextDocument,
+    }));
+
+    expect(mockGetSprint).toHaveBeenCalledWith("sprint-1");
+    expect(mockGetIssues).not.toHaveBeenCalled(); // Should NOT query generic sprint list
+    expect(result.sprintData).toBeDefined();
+    expect((result.sprintData as Record<string, unknown>).id).toBe("sprint-1");
+    expect((result.sprintData as Record<string, unknown>).sprintIssues).toHaveLength(1);
+  });
+
+  it("finds parent sprint from associations when documentType is issue", async () => {
+    const contextDocument = {
+      document: { id: "issue-1", title: "Fix bug", document_type: "issue" },
+      associations: [
+        { id: "assoc-1", source_document_id: "issue-1", target_document_id: "sprint-1", relationship_type: "sprint" },
+        { id: "assoc-2", source_document_id: "issue-1", target_document_id: "proj-1", relationship_type: "project" },
+      ],
+    };
+    const sprint = { id: "sprint-1", title: "Sprint 5", properties: { status: "active" } };
+    const sprintIssues = [{ id: "issue-1", title: "Fix bug" }, { id: "issue-2", title: "Add feature" }];
+
+    mockGetSprint.mockResolvedValueOnce(sprint);
+    mockGetSprintIssues.mockResolvedValueOnce(sprintIssues);
+
+    const result = await fetchSprint(makeState({
+      triggerType: "on-demand",
+      documentId: "issue-1",
+      documentType: "issue",
+      contextDocument,
+    }));
+
+    expect(mockGetSprint).toHaveBeenCalledWith("sprint-1");
+    expect(mockGetIssues).not.toHaveBeenCalled();
+    expect(result.sprintData).toBeDefined();
+    expect((result.sprintData as Record<string, unknown>).id).toBe("sprint-1");
+    expect((result.sprintData as Record<string, unknown>).sprintIssues).toHaveLength(2);
+  });
+
+  it("falls back to generic sprint fetch when on-demand but no contextDocument", async () => {
+    const sprint = { id: "sprint-1", title: "Sprint 5" };
+    mockGetIssues.mockResolvedValueOnce([sprint]);
+    mockGetSprintIssues.mockResolvedValueOnce([]);
+
+    const result = await fetchSprint(makeState({
+      triggerType: "on-demand",
+      documentId: "issue-1",
+      documentType: "issue",
+      contextDocument: null,
+    }));
+
+    expect(mockGetIssues).toHaveBeenCalledWith("document_type=sprint&status=active");
+    expect(result.sprintData).toBeDefined();
+  });
+
+  it("falls back to generic when issue has no sprint association", async () => {
+    const contextDocument = {
+      document: { id: "issue-1", title: "Orphan issue", document_type: "issue" },
+      associations: [
+        { id: "assoc-1", source_document_id: "issue-1", target_document_id: "proj-1", relationship_type: "project" },
+      ],
+    };
+    const sprint = { id: "sprint-1", title: "Sprint 5" };
+    mockGetIssues.mockResolvedValueOnce([sprint]);
+    mockGetSprintIssues.mockResolvedValueOnce([]);
+
+    const result = await fetchSprint(makeState({
+      triggerType: "on-demand",
+      documentId: "issue-1",
+      documentType: "issue",
+      contextDocument,
+    }));
+
+    // Falls back to generic because no sprint association found
+    expect(mockGetIssues).toHaveBeenCalledWith("document_type=sprint&status=active");
   });
 });
 

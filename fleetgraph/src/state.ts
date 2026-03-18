@@ -13,6 +13,14 @@ export interface Finding {
 }
 
 /**
+ * Enriched document context from resolve_context (on-demand mode only).
+ */
+export interface ContextDocument {
+  document: Record<string, unknown>;
+  associations: Record<string, unknown>[];
+}
+
+/**
  * Action proposed to the user for confirmation.
  */
 export interface ProposedAction {
@@ -46,6 +54,12 @@ export const FleetGraphState = Annotation.Root({
     default: () => "",
   }),
   userId: Annotation<string | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // --- Context enrichment (populated by resolve_context in on-demand mode) ---
+  contextDocument: Annotation<ContextDocument | null>({
     reducer: (_, next) => next,
     default: () => null,
   }),
