@@ -17,7 +17,7 @@ vi.mock("@langchain/anthropic", () => {
 });
 
 // Import after mock setup
-const { determineSeverity, analyzeHealth, analyzeContext } = await import(
+const { determineSeverity, analyzeHealth, analyzeContext, buildAnalysisMode } = await import(
   "./reasoning.js"
 );
 
@@ -39,6 +39,7 @@ function makeState(
     severity: "clean",
     proposedActions: [],
     humanDecision: null,
+    contextDocument: null,
     errors: [],
     ...overrides,
   };
@@ -327,6 +328,8 @@ describe("analyzeContext", () => {
       triggerType: "on-demand",
       documentId: "doc-123",
       documentType: "sprint",
+      issues: [{ id: "i1", title: "Task", status: "todo" }],
+      sprintData: { id: "doc-123", title: "Sprint 5" },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       messages: [{ role: "human", content: "Is this sprint on track?" }] as any,
     });
@@ -346,6 +349,7 @@ describe("analyzeContext", () => {
     const state = makeState({
       triggerType: "on-demand",
       issues: [{ id: "abc", title: "Test", status: "todo" }],
+      sprintData: { id: "sprint-1", title: "Sprint 5" },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       messages: [{ role: "human", content: "Analyze" }] as any,
     });
@@ -375,5 +379,363 @@ describe("analyzeContext", () => {
     expect(mockWithStructuredOutput).toHaveBeenCalledWith(expect.anything(), {
       name: "context_analysis",
     });
+  });
+
+  it("includes sprint health analysis instructions when documentType is sprint", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      findings: [],
+      summary: "Sprint on track",
+    });
+
+    const state = makeState({
+      triggerType: "on-demand",
+      documentId: "sprint-123",
+      documentType: "sprint",
+      issues: [
+        { id: "i1", title: "Task A", status: "done", priority: "medium" },
+        { id: "i2", title: "Task B", status: "todo", priority: "high" },
+      ],
+      sprintData: { id: "sprint-123", title: "Sprint 5", startDate: "2026-03-10", endDate: "2026-03-24" },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "Is this sprint on track?" }] as any,
+    });
+
+    await analyzeContext(state);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptContent = (mockInvoke.mock.calls[0] as any)[0][0].content as string;
+    expect(promptContent).toContain("SPRINT HEALTH ANALYSIS");
+    expect(promptContent).toContain("completion rate");
+    expect(promptContent).toContain("Is this sprint on track?");
+    expect(promptContent).not.toContain("ISSUE CONTEXT ANALYSIS");
+    expect(promptContent).not.toContain("GENERAL PROJECT ANALYSIS");
+  });
+
+  it("includes blocker/dependency detection instructions when documentType is sprint", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      findings: [
+        {
+          id: "finding-1",
+          severity: "warning",
+          title: "Blocker detected",
+          description: "High priority unstarted",
+          evidence: "Issue i2",
+          recommendation: "Prioritize",
+        },
+      ],
+      summary: "Blockers found",
+    });
+
+    const state = makeState({
+      triggerType: "on-demand",
+      documentId: "sprint-123",
+      documentType: "sprint",
+      issues: [
+        { id: "i1", title: "Task A", status: "in_progress", priority: "medium", assignee_id: "user-1" },
+        { id: "i2", title: "Critical Bug", status: "backlog", priority: "urgent", assignee_id: null },
+      ],
+      sprintData: { id: "sprint-123", title: "Sprint 5" },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "Are there any blockers?" }] as any,
+    });
+
+    const result = await analyzeContext(state);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptContent = (mockInvoke.mock.calls[0] as any)[0][0].content as string;
+    expect(promptContent).toContain("BLOCKER/DEPENDENCY DETECTION");
+    expect(promptContent).toContain("Are there any blockers?");
+    expect(result.findings).toHaveLength(1);
+    expect(result.severity).toBe("warning");
+  });
+
+  it("includes risk assessment instructions in sprint mode", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      findings: [],
+      summary: "Low risk",
+    });
+
+    const state = makeState({
+      triggerType: "on-demand",
+      documentId: "sprint-123",
+      documentType: "sprint",
+      issues: [{ id: "i1", title: "Task", status: "todo" }],
+      sprintData: { id: "sprint-123", title: "Sprint 5" },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "Any risks?" }] as any,
+    });
+
+    await analyzeContext(state);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptContent = (mockInvoke.mock.calls[0] as any)[0][0].content as string;
+    expect(promptContent).toContain("RISK ASSESSMENT");
+    expect(promptContent).toContain("velocity");
+  });
+
+  it("uses issue-scoped analysis when documentType is issue", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      findings: [],
+      summary: "Issue is in progress",
+    });
+
+    const state = makeState({
+      triggerType: "on-demand",
+      documentId: "issue-456",
+      documentType: "issue",
+      issues: [
+        { id: "issue-456", title: "Fix auth", status: "in_progress", assignee_id: "user-1", priority: "high" },
+        { id: "issue-789", title: "Add tests", status: "todo", assignee_id: "user-1", priority: "medium" },
+      ],
+      sprintData: { id: "sprint-123", title: "Sprint 5" },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "What's the status of this issue?" }] as any,
+    });
+
+    await analyzeContext(state);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptContent = (mockInvoke.mock.calls[0] as any)[0][0].content as string;
+    expect(promptContent).toContain("ISSUE CONTEXT ANALYSIS");
+    expect(promptContent).toContain("issue-456");
+    expect(promptContent).toContain("assignee workload");
+    expect(promptContent).not.toContain("SPRINT HEALTH ANALYSIS");
+    expect(promptContent).not.toContain("GENERAL PROJECT ANALYSIS");
+  });
+
+  it("uses general analysis when no documentType provided", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      findings: [],
+      summary: "General overview",
+    });
+
+    const state = makeState({
+      triggerType: "on-demand",
+      documentId: null,
+      documentType: null,
+      issues: [{ id: "i1", title: "Task", status: "todo" }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "How is the project?" }] as any,
+    });
+
+    await analyzeContext(state);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptContent = (mockInvoke.mock.calls[0] as any)[0][0].content as string;
+    expect(promptContent).toContain("GENERAL PROJECT ANALYSIS");
+    expect(promptContent).toContain("How is the project?");
+    expect(promptContent).not.toContain("SPRINT HEALTH ANALYSIS");
+    expect(promptContent).not.toContain("ISSUE CONTEXT ANALYSIS");
+  });
+
+  it("includes document context metadata in prompt", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      findings: [],
+      summary: "OK",
+    });
+
+    const state = makeState({
+      triggerType: "on-demand",
+      documentId: "doc-abc",
+      documentType: "sprint",
+      contextDocument: {
+        document: { id: "doc-abc", title: "Sprint 5", properties: { startDate: "2026-03-10" } },
+        associations: [{ type: "project", id: "proj-1", title: "Main Project" }],
+      },
+      issues: [{ id: "i1", title: "Task", status: "todo" }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "Analyze" }] as any,
+    });
+
+    await analyzeContext(state);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptContent = (mockInvoke.mock.calls[0] as any)[0][0].content as string;
+    expect(promptContent).toContain("DOCUMENT CONTEXT");
+    expect(promptContent).toContain("Sprint 5");
+  });
+
+  it("skips LLM when all data sources are empty", async () => {
+    const state = makeState({
+      triggerType: "on-demand",
+      documentType: "sprint",
+      issues: [],
+      sprintData: null,
+      teamGrid: null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "Analyze" }] as any,
+    });
+
+    const result = await analyzeContext(state);
+
+    expect(result.findings).toEqual([]);
+    expect(result.severity).toBe("clean");
+    expect(result.errors).toContainEqual(expect.stringContaining("no data available"));
+    expect(mockWithStructuredOutput).not.toHaveBeenCalled();
+  });
+
+  it("includes partial data handling rules", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      findings: [],
+      summary: "OK",
+    });
+
+    const state = makeState({
+      triggerType: "on-demand",
+      documentType: "sprint",
+      issues: [{ id: "i1", title: "Task", status: "todo" }],
+      sprintData: null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "Analyze" }] as any,
+    });
+
+    await analyzeContext(state);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptContent = (mockInvoke.mock.calls[0] as any)[0][0].content as string;
+    expect(promptContent).toContain("PARTIAL DATA HANDLING");
+    expect(promptContent).toContain("Never infer or hallucinate");
+  });
+
+  it("returns clean severity with empty findings for informational response", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      findings: [],
+      summary: "Sprint is on track: 8/12 issues done, 3 days remaining.",
+    });
+
+    const state = makeState({
+      triggerType: "on-demand",
+      documentType: "sprint",
+      documentId: "sprint-123",
+      issues: [{ id: "i1", title: "Task", status: "done" }],
+      sprintData: { id: "sprint-123", title: "Sprint 5" },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "Is this sprint on track?" }] as any,
+    });
+
+    const result = await analyzeContext(state);
+
+    expect(result.findings).toEqual([]);
+    expect(result.severity).toBe("clean");
+    expect(result.errors).toEqual([]);
+  });
+
+  it("defaults query to 'Summarize the current state' when no messages", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      findings: [],
+      summary: "Summary",
+    });
+
+    const state = makeState({
+      triggerType: "on-demand",
+      documentType: "sprint",
+      issues: [{ id: "i1", title: "Task", status: "todo" }],
+      messages: [],
+    });
+
+    await analyzeContext(state);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptContent = (mockInvoke.mock.calls[0] as any)[0][0].content as string;
+    expect(promptContent).toContain("Summarize the current state");
+  });
+
+  it("skips LLM when all data sources are empty", async () => {
+    const state = makeState({
+      triggerType: "on-demand",
+      documentType: "sprint",
+      issues: [],
+      sprintData: null,
+      teamGrid: null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "Analyze" }] as any,
+    });
+
+    const result = await analyzeContext(state);
+
+    expect(result.findings).toEqual([]);
+    expect(result.severity).toBe("clean");
+    expect(result.errors).toContain("analyze_context: no data available for analysis");
+    expect(mockWithStructuredOutput).not.toHaveBeenCalled();
+  });
+
+  it("uses documentId-only fallback when contextDocument is null", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      findings: [],
+      summary: "OK",
+    });
+
+    const state = makeState({
+      triggerType: "on-demand",
+      documentId: "doc-xyz",
+      documentType: "issue",
+      contextDocument: null,
+      issues: [{ id: "i1", title: "Task", status: "todo" }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "Analyze" }] as any,
+    });
+
+    await analyzeContext(state);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptContent = (mockInvoke.mock.calls[0] as any)[0][0].content as string;
+    expect(promptContent).toContain("Document ID: doc-xyz");
+    expect(promptContent).toContain("Document Type: issue");
+    expect(promptContent).not.toContain("Associations:");
+  });
+
+  it("omits document context section when no documentId or contextDocument", async () => {
+    mockInvoke.mockResolvedValueOnce({
+      findings: [],
+      summary: "OK",
+    });
+
+    const state = makeState({
+      triggerType: "on-demand",
+      documentId: null,
+      documentType: null,
+      contextDocument: null,
+      issues: [{ id: "i1", title: "Task", status: "todo" }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: "human", content: "Analyze" }] as any,
+    });
+
+    await analyzeContext(state);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptContent = (mockInvoke.mock.calls[0] as any)[0][0].content as string;
+    expect(promptContent).not.toContain("DOCUMENT CONTEXT");
+    expect(promptContent).not.toContain("Document ID:");
+  });
+});
+
+describe("buildAnalysisMode", () => {
+  it("returns sprint mode for sprint documentType", () => {
+    const result = buildAnalysisMode("sprint", "sprint-123");
+    expect(result).toContain("SPRINT HEALTH ANALYSIS MODE");
+    expect(result).toContain("completion rate");
+    expect(result).toContain("BLOCKER/DEPENDENCY DETECTION");
+    expect(result).toContain("RISK ASSESSMENT");
+  });
+
+  it("returns issue mode with documentId for issue documentType", () => {
+    const result = buildAnalysisMode("issue", "issue-456");
+    expect(result).toContain("ISSUE CONTEXT ANALYSIS MODE");
+    expect(result).toContain("issue-456");
+    expect(result).toContain("ASSIGNEE WORKLOAD");
+    expect(result).toContain("SPRINT MEMBERSHIP");
+    expect(result).toContain("SIBLING ISSUE ANALYSIS");
+  });
+
+  it("returns general mode for null documentType", () => {
+    const result = buildAnalysisMode(null, null);
+    expect(result).toContain("GENERAL PROJECT ANALYSIS MODE");
+    expect(result).not.toContain("SPRINT HEALTH");
+    expect(result).not.toContain("ISSUE CONTEXT");
+  });
+
+  it("returns general mode for unknown documentType", () => {
+    const result = buildAnalysisMode("wiki", "doc-789");
+    expect(result).toContain("GENERAL PROJECT ANALYSIS MODE");
   });
 });

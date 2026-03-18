@@ -35,6 +35,7 @@ function makeState(
     severity: "clean",
     proposedActions: [],
     humanDecision: null,
+    contextDocument: null,
     errors: [],
     ...overrides,
   };

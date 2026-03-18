@@ -170,37 +170,162 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
 }
 
 /**
+ * Build context-type-specific analysis instructions for the prompt.
+ */
+export function buildAnalysisMode(
+  documentType: string | null,
+  documentId: string | null
+): string {
+  if (documentType === "sprint") {
+    return `=== SPRINT HEALTH ANALYSIS MODE ===
+
+You are analyzing a sprint. Focus on overall sprint health, velocity, blockers, unstarted work, and resource allocation.
+
+1. SPRINT HEALTH ANALYSIS
+   - Compute completion rate: count issues with status "done" vs total issues, express as percentage
+   - Count unstarted issues: status === "backlog" or "todo"
+   - Count in-progress issues: status === "in_progress" or "in-progress"
+   - If sprint has start/end dates, compute days remaining and assess if current velocity is sufficient
+   - Provide an overall health assessment: on-track, at-risk, or off-track
+
+2. BLOCKER/DEPENDENCY DETECTION
+   - Identify high-priority issues (priority === "urgent" or "high") that are unstarted (status "backlog" or "todo")
+   - Flag issues with no assignee (assignee_id is null/undefined) that are in the active sprint
+   - Detect workload concentration: multiple issues assigned to the same person (assignee workload imbalance)
+   - Identify stale in-progress work: issues with status "in_progress" that haven't been updated recently
+
+3. RISK ASSESSMENT
+   - Assess completion velocity: ratio of done issues to total, projected against days remaining
+   - Evaluate assignment distribution: are issues spread across team or concentrated on few members?
+   - Check priority patterns: are high-priority items being addressed first?
+   - If work remaining exceeds reasonable velocity for days remaining, flag as risk`;
+  }
+
+  if (documentType === "issue") {
+    return `=== ISSUE CONTEXT ANALYSIS MODE ===
+
+You are analyzing a specific issue (ID: ${documentId}). Focus on this issue's status, its sprint context, assignee workload, and relationship to sibling issues.
+
+1. ISSUE STATUS ANALYSIS
+   - Identify the specific issue by ID "${documentId}" in the data
+   - Report its current status, priority, and assignee
+   - If the issue is blocked or stale, explain why
+
+2. ASSIGNEE WORKLOAD
+   - Count how many other issues share the same assignee (assignee workload analysis)
+   - Flag if the assignee has too many in-progress items
+   - Note if the issue is unassigned
+
+3. SPRINT MEMBERSHIP
+   - Determine if this issue belongs to an active sprint
+   - If in a sprint, assess how this issue fits within the sprint's progress
+   - Report sibling issues in the same sprint (same assignee or related status)
+
+4. SIBLING ISSUE ANALYSIS
+   - Identify issues with similar priority or status patterns
+   - Flag potential dependencies or conflicts with other issues
+   - Note if related issues are blocked or stale`;
+  }
+
+  return `=== GENERAL PROJECT ANALYSIS MODE ===
+
+No specific document context — provide a general project analysis using all available data.
+
+1. Overall project health summary
+2. Key issues or risks across all available data
+3. Resource allocation patterns
+4. Priority distribution analysis`;
+}
+
+/**
  * Analyze context for on-demand queries — LLM reasons about a specific
  * document the user is viewing.
  */
 export async function analyzeContext(
   state: FleetGraphStateType
 ): Promise<Partial<FleetGraphStateType>> {
+  // Guard: skip LLM when all data sources are empty (same as analyzeHealth)
+  const hasAnyData =
+    state.issues.length > 0 ||
+    state.sprintData !== null ||
+    state.teamGrid !== null;
+
+  if (!hasAnyData) {
+    console.log("[analyze_context] no data available from any source, skipping LLM");
+    return {
+      findings: [],
+      severity: "clean",
+      errors: ["analyze_context: no data available for analysis"],
+    };
+  }
+
   const lastMessage = state.messages[state.messages.length - 1];
   const userQuery =
     lastMessage && "content" in lastMessage
       ? String(lastMessage.content)
       : "Summarize the current state";
 
-  // Issues already filtered/extracted by fetchIssues node
   const issuesSummary = state.issues;
+  const now = new Date().toISOString();
+  const analysisMode = buildAnalysisMode(state.documentType, state.documentId);
 
-  const prompt = `You are a project intelligence assistant for Ship.
-The user is viewing document ${state.documentId} (type: ${state.documentType}).
-Today's date: ${new Date().toISOString()}
+  // Build document context section if available
+  const contextSection = state.contextDocument
+    ? `=== DOCUMENT CONTEXT ===
+Document: ${JSON.stringify(state.contextDocument.document)}
+Associations: ${JSON.stringify(state.contextDocument.associations)}
+`
+    : state.documentId
+      ? `=== DOCUMENT CONTEXT ===
+Document ID: ${state.documentId}
+Document Type: ${state.documentType}
+`
+      : "";
 
-User question: ${userQuery}
+  const prompt = `You are a project intelligence assistant for Ship, a project management tool.
+Today's date: ${now}
 
-Available data:
-- Active issues (${issuesSummary.length} total, already filtered to non-done/non-cancelled):
+=== USER QUESTION ===
+${userQuery}
+
+${contextSection}${analysisMode}
+
+=== SEVERITY MAPPINGS ===
+- Unstarted high-priority/urgent issues: warning
+- Unassigned issues in active sprint: warning
+- Workload concentration (>3 issues on one person): info
+- Stale in-progress work (no updates in >3 days): warning
+- Sprint off-track (completion rate insufficient for remaining time): critical
+- Blocked issues with no resolution path: critical
+
+=== PARTIAL DATA HANDLING ===
+IMPORTANT: Only analyze data categories that were successfully fetched.
+- If the issues array is empty, do NOT produce issue-related findings.
+- If sprint data is null/missing, do NOT produce sprint-related findings.
+- If team data is null/missing, do NOT produce team-related findings.
+- Never infer or hallucinate findings about data you did not receive.
+
+=== PROJECT DATA ===
+
+ACTIVE ISSUES (${issuesSummary.length} total — already filtered to non-done/non-cancelled):
 ${JSON.stringify(issuesSummary)}
-- Sprint: ${state.sprintData ? JSON.stringify(state.sprintData) : "not available"}
-- Team: ${state.teamGrid ? JSON.stringify(state.teamGrid) : "not available"}
 
-Analyze the data and answer the user's question with specific, actionable insights.
-If you identify problems, generate findings with evidence (specific issue IDs, titles, sprint names) and recommendations.
-Otherwise return an empty findings array with a summary answering the user's question.
-Generate unique IDs for findings using format "finding-1", "finding-2", etc.`;
+SPRINT DATA:
+${state.sprintData ? JSON.stringify(state.sprintData) : "No sprint data available"}
+
+TEAM DATA:
+${state.teamGrid ? JSON.stringify(state.teamGrid) : "No team data available"}
+
+STANDUP STATUS:
+${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data available"}
+
+=== INSTRUCTIONS ===
+- The summary field is your PRIMARY response — answer the user's question directly and thoroughly.
+- Only populate findings when there are actionable problems detected.
+- If everything looks healthy, return an empty findings array with a comprehensive summary answering the user's question.
+- Be specific in evidence: cite actual issue IDs, titles, sprint names, completion percentages.
+- One finding per problem detected. Do not combine multiple problems.
+- Generate unique IDs for findings using format "finding-1", "finding-2", etc.`;
 
   try {
     const result = await model
