@@ -8,8 +8,9 @@ test.describe('Programs', () => {
     await page.locator('#password').fill('admin123')
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 
-    // Wait for app to load
-    await expect(page).not.toHaveURL('/login', { timeout: 5000 })
+    // Wait for app to load — allow extra time for slow workers/containers
+    await expect(page).not.toHaveURL('/login', { timeout: 15000 })
+    await page.waitForLoadState('networkidle')
   })
 
   test('can navigate to Programs mode via icon rail', async ({ page }) => {

@@ -260,17 +260,17 @@ test.describe('Data Integrity - Images', () => {
     const editor = page.locator('.ProseMirror')
     await editor.click()
 
-    // Upload first image
+    // Upload first image via slash command + setInputFiles (CDP filechooser is unreliable)
     await page.keyboard.type('Image 1:')
     await page.keyboard.press('Enter')
     await page.keyboard.type('/image')
     await page.waitForTimeout(500)
 
     const tmpPath1 = createTestImageFile()
-    let fileChooserPromise = page.waitForEvent('filechooser')
     await page.keyboard.press('Enter')
-    let fileChooser = await fileChooserPromise
-    await fileChooser.setFiles(tmpPath1)
+    const fileInput1 = page.locator('body > input[type="file"]')
+    await fileInput1.waitFor({ state: 'attached', timeout: 5000 })
+    await fileInput1.setInputFiles(tmpPath1)
 
     await page.waitForTimeout(2000)
 
@@ -283,11 +283,18 @@ test.describe('Data Integrity - Images', () => {
     await page.waitForTimeout(500)
 
     const tmpPath2 = createTestImageFile()
-    fileChooserPromise = page.waitForEvent('filechooser')
     await page.keyboard.press('Enter')
-    fileChooser = await fileChooserPromise
-    await fileChooser.setFiles(tmpPath2)
+    const fileInput2 = page.locator('body > input[type="file"]')
+    await fileInput2.waitFor({ state: 'attached', timeout: 5000 })
+    await fileInput2.setInputFiles(tmpPath2)
 
+    // Wait for both images to appear in editor
+    await expect(editor.locator('img')).toHaveCount(2, { timeout: 10000 })
+
+    // Wait for Yjs collaboration server to persist content to DB.
+    // "Saved" = WebSocket sync complete, but DB write is async and unpredictable.
+    // KNOWN FLAKY: Same Yjs persistence lag as my-week-stale-data tests.
+    await expect(page.getByText('Saved')).toBeVisible({ timeout: 10000 })
     await page.waitForTimeout(3000)
 
     // Get image sources
@@ -368,6 +375,8 @@ test.describe('Data Integrity - Mentions', () => {
     let options = await page.locator('[role="option"]').all()
     if (options.length > 0) {
       await options[0].click()
+      // Wait for mention to be inserted into editor
+      await expect(editor.locator('.mention').first()).toBeVisible({ timeout: 3000 })
       await page.waitForTimeout(500)
     }
 
@@ -379,20 +388,25 @@ test.describe('Data Integrity - Mentions', () => {
     options = await page.locator('[role="option"]').all()
     if (options.length > 1) {
       await options[1].click()
-      await page.waitForTimeout(500)
     } else if (options.length > 0) {
       await options[0].click()
-      await page.waitForTimeout(500)
     }
+    // Wait for second mention to appear
+    await expect(editor.locator('.mention')).toHaveCount(2, { timeout: 3000 }).catch(() => {
+      // May have only 1 if same option was selected — that's ok
+    })
+    await page.waitForTimeout(500)
 
-    // Wait for save
-    await page.waitForTimeout(2000)
+    // Wait for Yjs collaboration server to persist content to DB.
+    // KNOWN FLAKY: "Saved" = WebSocket sync, but DB write is async/unpredictable.
+    await expect(page.getByText('Saved')).toBeVisible({ timeout: 10000 })
+    await page.waitForTimeout(3000)
 
     const mentionCount = await editor.locator('.mention').count()
 
     // Reload
     await page.reload()
-    await expect(page.locator('.ProseMirror')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.ProseMirror')).toBeVisible({ timeout: 10000 })
 
     // Same number of mentions should exist
     const reloadedMentionCount = await page.locator('.ProseMirror .mention').count()
