@@ -1,0 +1,41 @@
+### 5b. E2E tests
+
+
+**Always use the `/e2e-test-runner` skill — do not run `pnpm test:e2e` directly.**
+
+**Worker count:** The baseline audit was run with **4 workers** (`PLAYWRIGHT_WORKERS=4`). Use 4 workers when re-running to ensure runtime and pass/fail counts are comparable to baseline.
+
+**8-worker results (tested on 16-core / 16 GB Docker Desktop allocation):**
+- Runtime: 25.9 min (~32% faster than 4-worker baseline of ~38 min)
+- Passed: 812 / Failed: 57 (vs 836 / 33 at 4 workers)
+- The higher failure count is caused by increased concurrency stress on the Docker daemon and testcontainer startup timing — not code regressions.
+- **Recommendation:** Use 4 workers for baseline comparisons and post-improvement re-runs. Use 8 workers for faster development iteration where absolute failure-count comparability is not required.
+- **Critical:** Always run E2E tests as the `node` user (never `root`). The testcontainers reaper writes `/tmp/testcontainers-node.lock`; if this file is owned by root from a prior run, all workers will fail with `EACCES: permission denied`. Fix with: `sudo rm -f /tmp/testcontainers-node.lock && sudo chown -R node:node /workspace/web/dist/ /workspace/test-results/`
+
+```bash
+# Count tests and spec files
+find /workspace/e2e -name "*.spec.ts" | wc -l
+grep -rn "^test\b\|^  test\b" /workspace/e2e --include="*.spec.ts" | wc -l
+
+# Check for empty/TODO tests
+grep -rn "test.fixme\|test.skip\|TODO" /workspace/e2e --include="*.spec.ts"
+
+# Derive pass/fail from last completed run results:
+python3 -c "
+import json, os
+path = '/workspace/test-results/progress.jsonl'
+if not os.path.exists(path):
+    print('No results yet — run E2E suite first')
+    exit()
+tests = {}
+with open(path) as f:
+    for line in f:
+        e = json.loads(line)
+        if 'test' in e: tests[e['test']] = e.get('status', e.get('outcome'))
+counts = {}
+for v in tests.values(): counts[v] = counts.get(v,0)+1
+print('Total:', sum(counts.values()), '| Results:', counts)
+"
+```
+
+**Baseline to beat:** 836 passed / 33 failed (96.2%); coverage % = unknown (install `@vitest/coverage-v8`).
