@@ -36,8 +36,10 @@ import { SelectionPersistenceProvider } from '@/contexts/SelectionPersistenceCon
 import { ActionItemsModal } from '@/components/ActionItemsModal';
 import { AccountabilityBanner } from '@/components/AccountabilityBanner';
 import { ProjectContextSidebar } from '@/components/sidebars/ProjectContextSidebar';
+import { FindingsPanel, BadgeCount, useFindings } from '@/features/fleetgraph';
+import { FleetGraphOverlay } from '@/features/fleetgraph/components/FleetGraphOverlay';
 
-type Mode = 'docs' | 'issues' | 'projects' | 'programs' | 'sprints' | 'team' | 'settings' | 'dashboard' | 'project-context';
+type Mode = 'docs' | 'issues' | 'projects' | 'programs' | 'sprints' | 'team' | 'settings' | 'dashboard' | 'project-context' | 'fleetgraph';
 
 export function AppLayout() {
   const { user, logout, isSuperAdmin, impersonating, endImpersonation } = useAuth();
@@ -56,6 +58,7 @@ export function AppLayout() {
   const [projectSetupWizardOpen, setProjectSetupWizardOpen] = useState(false);
   const [actionItemsModalOpen, setActionItemsModalOpen] = useState(false);
   const [actionItemsModalShownOnLoad, setActionItemsModalShownOnLoad] = useState(false);
+  const [fleetgraphActive, setFleetgraphActive] = useState(false);
 
   // Session timeout handling
   const handleSessionTimeout = useCallback(() => {
@@ -74,6 +77,11 @@ export function AppLayout() {
   // Check if user needs to post a standup today
   const { data: standupStatus } = useStandupStatusQuery();
   const standupDue = standupStatus?.due ?? false;
+
+  // FleetGraph findings for badge count
+  // Disabled until Story 6.3 (backend proxy) is deployed — the route doesn't exist yet
+  const { data: findingsData } = useFindings();
+  const findingsCount = findingsData?.findings?.length ?? 0;
 
   // Check if user has pending action items (accountability tasks)
   const { data: actionItemsData } = useActionItemsQuery();
@@ -147,8 +155,19 @@ export function AppLayout() {
   // Get current document type and ID for /documents/:id routes
   const { currentDocumentType, currentDocumentId, currentDocumentProjectId } = useCurrentDocument();
 
+  // Derive document title for FleetGraph chat header
+  const currentDocumentTitle = useMemo(() => {
+    if (!currentDocumentId) return undefined;
+    const doc = documents.find(d => d.id === currentDocumentId);
+    if (doc) return doc.title;
+    const issue = issues.find(i => i.id === currentDocumentId);
+    if (issue) return issue.title;
+    return undefined;
+  }, [currentDocumentId, documents, issues]);
+
   // Determine active mode from path or document type
   const getActiveMode = (): Mode => {
+    if (fleetgraphActive) return 'fleetgraph';
     if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/my-week')) return 'dashboard';
     // For /documents/:id routes, use document type from context
     if (location.pathname.startsWith('/documents/')) {
@@ -201,6 +220,11 @@ export function AppLayout() {
   const activeDocumentId = getActiveDocumentId();
 
   const handleModeClick = (mode: Mode) => {
+    if (mode === 'fleetgraph') {
+      setFleetgraphActive(prev => !prev);
+      return;
+    }
+    setFleetgraphActive(false);
     switch (mode) {
       case 'dashboard': navigate('/my-week'); break;
       case 'docs': navigate('/docs'); break;
@@ -384,6 +408,13 @@ export function AppLayout() {
               onClick={() => handleModeClick('team')}
               showBadge={standupDue}
             />
+            <RailIcon
+              icon={<RadarIcon />}
+              label={findingsCount > 0 ? `FleetGraph, ${findingsCount} findings` : 'FleetGraph'}
+              active={activeMode === 'fleetgraph'}
+              onClick={() => handleModeClick('fleetgraph')}
+              badge={<BadgeCount count={findingsCount} />}
+            />
           </div>
 
           {/* Expand sidebar button (shows when collapsed) */}
@@ -421,7 +452,7 @@ export function AppLayout() {
         <aside
           className={cn(
             'flex flex-col border-r border-border transition-all duration-200 overflow-hidden select-none',
-            (leftSidebarCollapsed || hideLeftSidebar) ? 'w-0 border-r-0' : 'w-56'
+            ((leftSidebarCollapsed || hideLeftSidebar) && activeMode !== 'fleetgraph') ? 'w-0 border-r-0' : 'w-56'
           )}
           aria-label="Document list"
         >
@@ -438,6 +469,7 @@ export function AppLayout() {
                 {activeMode === 'team' && 'Teams'}
                 {activeMode === 'settings' && 'Settings'}
                 {activeMode === 'project-context' && 'Project'}
+                {activeMode === 'fleetgraph' && 'FleetGraph'}
               </h2>
               <div className="flex items-center gap-1">
                 {activeMode === 'docs' && (
@@ -532,6 +564,9 @@ export function AppLayout() {
                   activeDocumentId={activeDocumentId}
                 />
               )}
+              {activeMode === 'fleetgraph' && (
+                <FindingsPanel />
+              )}
             </div>
 
           </div>
@@ -575,13 +610,23 @@ export function AppLayout() {
         open={actionItemsModalOpen}
         onClose={() => setActionItemsModalOpen(false)}
       />
+
+      {/* FleetGraph Chat FAB + Drawer — fixed overlays, only on issue/sprint pages */}
+      {(currentDocumentType === 'issue' || currentDocumentType === 'sprint') && (
+        <FleetGraphOverlay
+          documentId={currentDocumentId}
+          documentType={currentDocumentType}
+          documentTitle={currentDocumentTitle}
+          workspaceId={currentWorkspace?.id ?? ''}
+        />
+      )}
     </div>
     </SelectionPersistenceProvider>
     </TooltipProvider>
   );
 }
 
-function RailIcon({ icon, label, active, onClick, showBadge }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void; showBadge?: boolean }) {
+function RailIcon({ icon, label, active, onClick, showBadge, badge }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void; showBadge?: boolean; badge?: React.ReactNode }) {
   return (
     <Tooltip content={label} side="right">
       <button
@@ -596,6 +641,7 @@ function RailIcon({ icon, label, active, onClick, showBadge }: { icon: React.Rea
         {showBadge && (
           <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-orange-500" />
         )}
+        {badge}
       </button>
     </Tooltip>
   );
@@ -1806,6 +1852,17 @@ function TeamIcon() {
   return (
     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+    </svg>
+  );
+}
+
+function RadarIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.07 4.93A10 10 0 0 0 4.93 19.07" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.24 7.76A6 6 0 0 0 7.76 16.24" />
+      <circle cx="12" cy="12" r="2" strokeWidth={1.5} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2v4m0 12v4M2 12h4m12 0h4" />
     </svg>
   );
 }

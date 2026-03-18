@@ -1,0 +1,10 @@
+export { FindingsPanel } from './components/FindingsPanel';
+export { BadgeCount } from './components/BadgeCount';
+export { ChatDrawer } from './components/ChatDrawer';
+export { ChatInput } from './components/ChatInput';
+export { FleetGraphFAB } from './components/FleetGraphFAB';
+export { FleetGraphOverlay } from './components/FleetGraphOverlay';
+export { ChatMessageBubble } from './components/ChatMessageBubble';
+export { useFindings, fleetgraphKeys } from './hooks/useFindings';
+export { useChatSession } from './hooks/useChatSession';
+export type { Finding, Severity, FindingsResponse, ChatMessage, ChatResponse } from './types';
