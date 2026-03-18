@@ -55,6 +55,9 @@ async function main() {
   server.listen(PORT, () => {
     console.log(`API server running on http://localhost:${PORT}`);
     console.log(`CORS origin: ${CORS_ORIGIN}`);
+    if (!process.env.FLEETGRAPH_SERVICE_URL || !process.env.FLEETGRAPH_API_TOKEN) {
+      console.warn('[fleetgraph-proxy] FLEETGRAPH_SERVICE_URL or FLEETGRAPH_API_TOKEN not set — proxy routes will return 503');
+    }
   });
 }
 
