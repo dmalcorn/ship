@@ -4,17 +4,25 @@ import { shipApi } from "../utils/ship-api.js";
 
 /**
  * Extract essential fields from a raw issue object.
+ *
+ * The Ship API's /api/issues endpoint flattens properties to top-level fields:
+ *   { id, title, state, priority, assignee_id, ... }
+ * But /api/documents/:id returns them nested under properties:
+ *   { id, title, properties: { state, priority, assignee_id, ... } }
+ * We handle both shapes for safety.
  */
 function extractIssueFields(issue: Record<string, unknown>): Record<string, unknown> {
   const props = issue.properties as Record<string, unknown> | undefined;
-  // Ship stores issue status in properties.state (not .status)
-  const status = props?.state ?? props?.status;
+  // Top-level fields (from /api/issues) take precedence, fall back to nested properties
+  const status = issue.state ?? props?.state ?? issue.status ?? props?.status;
+  const assignee_id = issue.assignee_id ?? props?.assignee_id;
+  const priority = issue.priority ?? props?.priority;
   return {
     id: issue.id,
     title: issue.title,
     status,
-    assignee_id: props?.assignee_id,
-    priority: props?.priority,
+    assignee_id,
+    priority,
     updated_at: issue.updated_at,
     created_at: issue.created_at,
   };
@@ -26,8 +34,8 @@ function extractIssueFields(issue: Record<string, unknown>): Record<string, unkn
 function filterActive(issues: Record<string, unknown>[]): Record<string, unknown>[] {
   return issues.filter((issue) => {
     const props = issue.properties as Record<string, unknown> | undefined;
-    // Ship stores issue status in properties.state (not .status)
-    const status = (props?.state as string) || (props?.status as string) || "";
+    // Top-level fields (from /api/issues) take precedence, fall back to nested properties
+    const status = (issue.state as string) || (props?.state as string) || (issue.status as string) || (props?.status as string) || "";
     return status !== "done" && status !== "cancelled";
   });
 }

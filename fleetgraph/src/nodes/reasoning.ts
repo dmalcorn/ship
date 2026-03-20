@@ -5,7 +5,7 @@ import type { FleetGraphStateType, Finding } from "../state.js";
 const model = new ChatAnthropic({
   model: "claude-sonnet-4-6",
   temperature: 0,
-  maxTokens: 8192,
+  maxTokens: 16384,
 });
 
 const FindingSchema = z.object({
