@@ -51,6 +51,19 @@ interface StoredFinding {
 }
 let storedFindings: StoredFinding[] = [];
 
+// --- Snoozed findings (findingId → expiry timestamp) ---
+const snoozedFindings = new Map<string, number>();
+
+/** Remove expired snoozes */
+function pruneExpiredSnoozes(): void {
+  const now = Date.now();
+  for (const [id, expiry] of snoozedFindings) {
+    if (expiry <= now) {
+      snoozedFindings.delete(id);
+    }
+  }
+}
+
 /** Convert graph output to the StoredFinding shape the frontend expects. */
 function toStoredFindings(
   threadId: string,
@@ -101,8 +114,10 @@ app.get("/health", (_req, res) => {
  * Polled by the Ship frontend every 30 seconds.
  */
 app.get("/api/fleetgraph/findings", (_req, res) => {
+  pruneExpiredSnoozes();
+  const visibleFindings = storedFindings.filter((f) => !snoozedFindings.has(f.id));
   res.json({
-    findings: storedFindings,
+    findings: visibleFindings,
     lastScanAt: lastRunTimestamp,
   });
 });
@@ -168,58 +183,75 @@ app.post("/api/fleetgraph/chat", async (req, res) => {
  */
 app.post("/api/fleetgraph/resume", async (req, res) => {
   try {
-    const { threadId, decision } = req.body;
+    const { threadId, decision, findingId, snoozeDurationMs } = req.body;
 
     if (!threadId || !decision) {
       res.status(400).json({ error: "threadId and decision are required" });
       return;
     }
 
-    if (decision !== "confirm" && decision !== "dismiss") {
-      res.status(400).json({ error: "decision must be 'confirm' or 'dismiss'" });
+    if (decision !== "confirm" && decision !== "dismiss" && decision !== "snooze") {
+      res.status(400).json({ error: "decision must be 'confirm', 'dismiss', or 'snooze'" });
       return;
     }
 
-    const config = { configurable: { thread_id: threadId } };
-
-    // Check if thread exists and has a pending interrupt in either graph
-    let targetGraph = null;
-    for (const graph of [proactiveGraph, onDemandGraph]) {
-      try {
-        const state = await graph.getState(config);
-        if (state?.next?.length > 0) {
-          targetGraph = graph;
-          break;
-        }
-      } catch {
-        // Thread not found in this graph — try next
+    if (decision === "snooze") {
+      // Snooze hides the finding until the duration expires — it stays in the store
+      const duration = typeof snoozeDurationMs === "number" && snoozeDurationMs > 0
+        ? snoozeDurationMs
+        : 60 * 60 * 1000; // default 1 hour
+      const expiry = Date.now() + duration;
+      if (findingId) {
+        snoozedFindings.set(findingId, expiry);
+        console.log(`[resume] finding ${findingId} snoozed until ${new Date(expiry).toISOString()}`);
       }
-    }
-
-    if (!targetGraph) {
-      res.status(404).json({
-        error: `No pending interrupt found for thread '${threadId}'. The thread may not exist, may have already been resumed, or the service may have restarted (MemorySaver is in-memory only).`,
+      res.json({
+        threadId,
+        status: "snoozed",
+        decision,
+        findingId: findingId || null,
+        snoozeUntil: new Date(expiry).toISOString(),
       });
       return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const resumeCmd = new Command({ resume: { decision } }) as any;
-    const result = await targetGraph.invoke(resumeCmd, config);
-
-    console.log(`[resume] thread ${threadId} resumed with decision: ${decision}`);
-
-    // Remove findings for this thread from the store on dismiss, or mark confirmed
-    if (decision === "dismiss") {
+    // Confirm or dismiss: remove this finding from the store
+    if (findingId) {
+      storedFindings = storedFindings.filter((f) => f.id !== findingId);
+      snoozedFindings.delete(findingId); // clear any snooze too
+      console.log(`[resume] finding ${findingId} ${decision}ed — ${storedFindings.length} findings remaining`);
+    } else {
+      // Legacy: no findingId means remove all findings for this thread
       storedFindings = storedFindings.filter((f) => f.threadId !== threadId);
+      console.log(`[resume] all findings for thread ${threadId} ${decision}ed`);
+    }
+
+    // Resume the graph if all findings for this thread have been acted on
+    const remainingForThread = storedFindings.filter((f) => f.threadId === threadId);
+    if (remainingForThread.length === 0) {
+      const config = { configurable: { thread_id: threadId } };
+      for (const graph of [proactiveGraph, onDemandGraph]) {
+        try {
+          const state = await graph.getState(config);
+          if (state?.next?.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const resumeCmd = new Command({ resume: { decision } }) as any;
+            await graph.invoke(resumeCmd, config);
+            console.log(`[resume] graph resumed for thread ${threadId} (all findings handled)`);
+            break;
+          }
+        } catch {
+          // Thread not found in this graph — try next
+        }
+      }
     }
 
     res.json({
       threadId,
       status: "resumed",
       decision,
-      findings: result.findings,
-      humanDecision: result.humanDecision,
+      findingId: findingId || null,
+      remainingFindings: storedFindings.filter((f) => f.threadId === threadId).length,
     });
   } catch (err) {
     console.error("[resume] error:", err);

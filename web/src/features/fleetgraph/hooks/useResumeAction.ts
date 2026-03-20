@@ -4,7 +4,9 @@ import { fleetgraphKeys } from './useFindings';
 
 interface ResumeActionParams {
   threadId: string;
-  decision: 'confirm' | 'dismiss';
+  decision: 'confirm' | 'dismiss' | 'snooze';
+  findingId?: string;
+  snoozeDurationMs?: number;
 }
 
 async function resumeAction(params: ResumeActionParams): Promise<void> {
