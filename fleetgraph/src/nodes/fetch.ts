@@ -129,7 +129,7 @@ export async function fetchIssues(
   state: FleetGraphStateType
 ): Promise<Partial<FleetGraphStateType>> {
   try {
-    const cap = state.triggerType === "on-demand" ? 50 : 100;
+    const cap = state.triggerType === "on-demand" ? 50 : 50;
 
     // On-demand with context: scope by document type
     if (state.triggerType === "on-demand" && state.contextDocument && state.documentId) {
