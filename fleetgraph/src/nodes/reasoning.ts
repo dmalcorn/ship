@@ -5,7 +5,7 @@ import type { FleetGraphStateType, Finding } from "../state.js";
 const model = new ChatAnthropic({
   model: "claude-sonnet-4-6",
   temperature: 0,
-  maxTokens: 4096,
+  maxTokens: 8192,
 });
 
 const FindingSchema = z.object({
@@ -144,6 +144,7 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
 - One finding per problem detected. Do not combine multiple problems.`;
 
   try {
+    console.log(`[analyze_health] invoking LLM with ${issuesSummary.length} issues, sprint=${!!state.sprintData}, team=${!!state.teamGrid}, standup=${!!state.standupStatus}`);
     const result = await model
       .withStructuredOutput(AnalysisOutputSchema, {
         name: "project_health_analysis",
