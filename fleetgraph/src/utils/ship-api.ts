@@ -44,6 +44,10 @@ export const shipApi = {
   getIssues: (params?: string) =>
     fetchWithRetry(`/api/issues${params ? `?${params}` : ""}`),
 
+  /** Fetch all current sprints (GET /api/weeks returns sprints for the current sprint number) */
+  getWeeks: () =>
+    fetchWithRetry("/api/weeks"),
+
   getSprint: (sprintId: string) =>
     fetchWithRetry(`/api/weeks/${sprintId}`),
 

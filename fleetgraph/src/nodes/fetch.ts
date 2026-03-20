@@ -199,35 +199,36 @@ export async function fetchSprint(
       // No sprint association found — fall through to generic fetch
     }
 
-    // Generic fallback: find any active sprint
-    const data = await shipApi.getIssues("document_type=sprint&status=active");
-    const sprints = Array.isArray(data) ? data : [];
+    // Generic fallback: fetch current sprints via GET /api/weeks
+    const data = await shipApi.getWeeks();
+    const weeksResponse = data as Record<string, unknown>;
+    const sprints = Array.isArray(weeksResponse.weeks) ? weeksResponse.weeks : (Array.isArray(data) ? data : []);
     if (sprints.length > 1) {
-      console.warn(
-        `[fetch_sprint] ${sprints.length} active sprints found — using first, others ignored`
+      console.log(
+        `[fetch_sprint] ${sprints.length} current sprints found — using first`
       );
     }
-    const activeSprint = sprints[0] || null;
+    const activeSprint = (sprints[0] || null) as Record<string, unknown> | null;
 
     if (activeSprint) {
       try {
-        const sprintId = (activeSprint as Record<string, unknown>).id as string;
+        const sprintId = activeSprint.id as string;
         const sprintIssues = await shipApi.getSprintIssues(sprintId);
         const issueList = Array.isArray(sprintIssues) ? sprintIssues : [];
-        (activeSprint as Record<string, unknown>).sprintIssues = issueList;
+        activeSprint.sprintIssues = issueList;
         console.log(
-          `[fetch_sprint] active sprint found with ${issueList.length} assigned issues`
+          `[fetch_sprint] active sprint "${activeSprint.title}" found with ${issueList.length} assigned issues`
         );
       } catch (issueErr) {
         const issueMsg = issueErr instanceof Error ? issueErr.message : String(issueErr);
         console.warn(`[fetch_sprint] sprint found but issue fetch failed: ${issueMsg}`);
-        (activeSprint as Record<string, unknown>).sprintIssues = [];
+        activeSprint.sprintIssues = [];
       }
     } else {
       console.log("[fetch_sprint] no active sprint found");
     }
 
-    return { sprintData: activeSprint as Record<string, unknown> | null, errors: [] };
+    return { sprintData: activeSprint, errors: [] };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[fetch_sprint] failed: ${msg}`);
