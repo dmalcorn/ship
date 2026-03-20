@@ -61,7 +61,16 @@ sudo apt-get update -qq && sudo apt-get install -y gh
 echo "Setting up Playwright for E2E tests..."
 # Install Docker CLI (needed by testcontainers for isolated E2E test environments)
 sudo apt-get install -y docker-cli 2>/dev/null || true
-# Allow the node user to access the Docker socket (mounted from host)
+# Allow the node user to access the Docker socket (mounted from host).
+# Two-layer fix:
+#   1. Create a 'docker' group matching the socket's GID and add 'node' to it
+#      (persists across restarts as long as the container isn't recreated)
+#   2. chmod 666 as immediate fallback
+DOCKER_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "")
+if [ -n "$DOCKER_GID" ] && [ "$DOCKER_GID" != "0" ]; then
+  sudo groupadd -g "$DOCKER_GID" docker 2>/dev/null || true
+  sudo usermod -aG docker node 2>/dev/null || true
+fi
 sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
 # Install Playwright browser and its system dependencies
 npx playwright install chromium
