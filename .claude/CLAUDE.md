@@ -91,6 +91,8 @@ pnpm test             # Runs api unit tests via vitest
 
 **API routes**: REST endpoints at `/api/{resource}` (documents, issues, projects, weeks). Auth uses session cookies with 15-minute timeout.
 
+**Issue status field**: Issue status is stored as `properties.state` (not `properties.status`). The seed uses `state: 'done'`, `state: 'in_progress'`, etc. Any code reading issue status from the API must read `properties.state`. FleetGraph's fetch nodes handle both (`state ?? status`) for safety.
+
 ## Adding API Endpoints
 
 **All API routes must be registered with OpenAPI.** See `/ship-openapi-endpoints` skill for the full pattern (schema → register path → implement route). Result: Swagger + MCP tools auto-generated.
@@ -119,7 +121,18 @@ Local dev uses `.env.local` for DB connection.
 
 ## Deployment
 
-**Just run the scripts.** Use `/workflows:deploy` for the full workflow, or run manually:
+### Railway (current production)
+
+Push to `master` triggers auto-deploy of all 3 services. See root `CLAUDE.md` → "Deployment (Railway)" for full environment variable reference.
+
+**Dockerfiles:** `Dockerfile.railway-api`, `Dockerfile.railway-web`, `Dockerfile.railway-fleetgraph`
+
+**Seed production DB** (run locally with the **public** Postgres URL from Railway dashboard):
+```bash
+DATABASE_URL="postgresql://...@turntable.proxy.rlwy.net:PORT/railway" pnpm db:seed
+```
+
+### AWS (legacy)
 
 ```bash
 ./scripts/deploy.sh prod           # Backend → Elastic Beanstalk

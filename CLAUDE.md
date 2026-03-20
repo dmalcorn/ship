@@ -106,6 +106,7 @@ START → resolve_context → [fetch_issues | fetch_sprint | fetch_team] (parall
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET` | `/health` | Health check (Railway monitors) |
+| `GET` | `/api/fleetgraph/findings` | Proactive findings store (polled by frontend every 30s) |
 | `POST` | `/api/fleetgraph/chat` | On-demand analysis (body: `{ documentId, documentType, message, threadId, workspaceId }`) |
 | `POST` | `/api/fleetgraph/resume` | Human-in-the-loop resume (body: `{ threadId, decision }`) |
 | `POST` | `/api/fleetgraph/analyze` | Manual proactive trigger (body: `{ workspaceId }`) |
@@ -128,12 +129,57 @@ START → resolve_context → [fetch_issues | fetch_sprint | fetch_team] (parall
 
 ## Deployment (Railway)
 
-FleetGraph deploys as a separate Railway service:
+Ship runs as **3 Railway services** from one repo, each with its own Dockerfile:
 
-- **Build:** `cd fleetgraph && npm run build`
-- **Start:** `cd fleetgraph && npm start`
-- **Health check:** `GET /health`
-- **Port:** 3001
+| Service | Dockerfile | Port | Health Check |
+|---------|-----------|------|-------------|
+| API | `Dockerfile.railway-api` | 3000 | `GET /health` |
+| Web | `Dockerfile.railway-web` | 80 | nginx default |
+| FleetGraph | `Dockerfile.railway-fleetgraph` | 3001 | `GET /health` |
+
+**Auto-deploy:** All services rebuild on push to `master`.
+
+### Railway Environment Variables
+
+**API service:**
+| Variable | Example | Notes |
+|----------|---------|-------|
+| `DATABASE_URL` | `postgresql://...railway.internal...` | Railway Postgres internal URL |
+| `SESSION_SECRET` | (random string) | Express session signing |
+| `CORS_ORIGIN` | `https://your-web.up.railway.app` | Frontend URL |
+| `NODE_ENV` | `production` | Triggers SSL on DB connection |
+| `FLEETGRAPH_SERVICE_URL` | `http://fleetgraph.railway.internal:3001` | Internal URL to FleetGraph service |
+| `FLEETGRAPH_API_TOKEN` | `ship_...` | Shared secret for FleetGraph auth |
+
+**FleetGraph service:**
+| Variable | Example | Notes |
+|----------|---------|-------|
+| `ANTHROPIC_API_KEY` | `sk-ant-...` | Claude API key |
+| `SHIP_API_URL` | `http://api.railway.internal:3000` | Internal URL to API service |
+| `FLEETGRAPH_API_TOKEN` | `ship_...` | Must match API service's token |
+| `LANGSMITH_TRACING` | `true` | Required for graded artifacts |
+| `LANGSMITH_API_KEY` | `lsv2_...` | LangSmith tracing key |
+| `LANGCHAIN_CALLBACKS_BACKGROUND` | `true` | Recommended for non-serverless |
+
+**Web service:** No env vars needed at runtime (Vite bakes config at build time, nginx proxies to API).
+
+### Seeding the Railway Database
+
+The seed creates users, programs, sprints, and issues (including FleetGraph detection targets like unassigned issues and security vulnerabilities).
+
+```bash
+# Get the PUBLIC Postgres URL from Railway dashboard (not the internal one)
+# Railway Dashboard → Postgres service → Connect tab → Public URL
+DATABASE_URL="postgresql://...@turntable.proxy.rlwy.net:PORT/railway" pnpm db:seed
+```
+
+**Important:** The internal URL (`postgres.railway.internal`) only works from within Railway's network. Use the public URL (`*.proxy.rlwy.net`) when running seed from your local machine.
+
+### Known Gotchas
+
+- **`properties.state` not `properties.status`**: Ship stores issue status in `properties.state`. FleetGraph's fetch nodes read both fields (`state ?? status`) for compatibility. If adding new fetch logic, always read `properties.state`.
+- **MemorySaver resets on deploy**: The HITL confirmation gate uses in-memory checkpointing. Any pending confirmations are lost when FleetGraph redeploys. This is acceptable for the MVP.
+- **Findings are in-memory**: The `GET /api/fleetgraph/findings` endpoint serves from an in-memory store populated by the proactive cron. After a restart, the store is empty until the first cron run (~3 minutes).
 
 Ship platform (api + web) deploys separately — see `.claude/CLAUDE.md` for Ship deployment commands.
 
