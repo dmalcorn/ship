@@ -53,6 +53,8 @@ export function AppLayout() {
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => {
     return localStorage.getItem('ship:leftSidebarCollapsed') === 'true';
   });
+  const [fleetgraphSidebarWidth, setFleetgraphSidebarWidth] = useState(224);
+  const resizingRef = useRef(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
   const [projectSetupWizardOpen, setProjectSetupWizardOpen] = useState(false);
@@ -451,12 +453,14 @@ export function AppLayout() {
         {/* Contextual Sidebar - Complementary landmark */}
         <aside
           className={cn(
-            'flex flex-col border-r border-border transition-all duration-200 overflow-hidden select-none',
-            ((leftSidebarCollapsed || hideLeftSidebar) && activeMode !== 'fleetgraph') ? 'w-0 border-r-0' : 'w-56'
+            'relative flex flex-col border-r border-border overflow-hidden select-none',
+            activeMode !== 'fleetgraph' && 'transition-all duration-200',
+            ((leftSidebarCollapsed || hideLeftSidebar) && activeMode !== 'fleetgraph') ? 'w-0 border-r-0' : (activeMode !== 'fleetgraph' ? 'w-56' : '')
           )}
+          style={activeMode === 'fleetgraph' ? { width: fleetgraphSidebarWidth } : undefined}
           aria-label="Document list"
         >
-          <div className="flex w-56 flex-col h-full">
+          <div className={cn('flex flex-col h-full', activeMode !== 'fleetgraph' ? 'w-56' : 'w-full')}>
             {/* Sidebar header */}
             <div className="flex h-10 items-center justify-between border-b border-border px-3">
               <h2 className="text-sm font-medium text-foreground m-0">
@@ -570,6 +574,30 @@ export function AppLayout() {
             </div>
 
           </div>
+          {/* Resize handle for FleetGraph sidebar */}
+          {activeMode === 'fleetgraph' && (
+            <div
+              className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-500/50 active:bg-blue-500/50 z-10"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                resizingRef.current = true;
+                const startX = e.clientX;
+                const startWidth = fleetgraphSidebarWidth;
+                const onMouseMove = (ev: MouseEvent) => {
+                  if (!resizingRef.current) return;
+                  const newWidth = Math.max(224, Math.min(600, startWidth + ev.clientX - startX));
+                  setFleetgraphSidebarWidth(newWidth);
+                };
+                const onMouseUp = () => {
+                  resizingRef.current = false;
+                  document.removeEventListener('mousemove', onMouseMove);
+                  document.removeEventListener('mouseup', onMouseUp);
+                };
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+              }}
+            />
+          )}
         </aside>
 
         {/* Main content */}
