@@ -11,6 +11,7 @@ export interface Finding {
   evidence: string;
   recommendation: string;
   affectedDocumentIds?: string[];
+  affectedDocumentType?: string;
 }
 
 /**

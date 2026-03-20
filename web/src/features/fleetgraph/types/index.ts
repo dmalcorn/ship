@@ -14,6 +14,7 @@ export interface Finding {
   severity: Severity;
   category: string;
   affectedDocumentId: string | null;
+  affectedDocumentType: string | null;
   affectedDocumentTitle: string | null;
   proposedActions: ProposedAction[];
   createdAt: string;

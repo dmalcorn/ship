@@ -55,6 +55,10 @@ export function FindingCard({ finding, onDismissed }: FindingCardProps) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [snoozeOpen]);
 
+  const docTypeLabel = finding.affectedDocumentType
+    ? finding.affectedDocumentType.charAt(0).toUpperCase() + finding.affectedDocumentType.slice(1)
+    : 'Document';
+
   const handleViewInShip = useCallback(() => {
     if (finding.affectedDocumentId) {
       navigate(`/documents/${finding.affectedDocumentId}`);
@@ -120,7 +124,7 @@ export function FindingCard({ finding, onDismissed }: FindingCardProps) {
             className="flex items-center gap-1 bg-[#005ea2] text-white text-xs px-2.5 py-1 rounded border-none cursor-pointer hover:bg-[#004d84] transition-colors"
           >
             <ExternalLinkIcon />
-            {finding.affectedDocumentId ? 'View Issue' : 'View Issues'}
+            {finding.affectedDocumentId ? `View ${docTypeLabel}` : 'View Issues'}
           </button>
 
           {/* Snooze with popover */}

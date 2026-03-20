@@ -39,6 +39,7 @@ function makeFindingsData(count: number, lastScanAt?: string): { data: FindingsR
     severity: severities[i % 3]!,
     category: 'test',
     affectedDocumentId: null,
+    affectedDocumentType: null,
     affectedDocumentTitle: null,
     proposedActions: [] as { id: string; label: string; description: string }[],
     createdAt: new Date().toISOString(),

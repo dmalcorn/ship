@@ -45,6 +45,7 @@ interface StoredFinding {
   severity: "critical" | "warning" | "info";
   category: string;
   affectedDocumentId: string | null;
+  affectedDocumentType: string | null;
   affectedDocumentTitle: string | null;
   proposedActions: Array<{ id: string; label: string; description: string }>;
   createdAt: string;
@@ -71,7 +72,7 @@ function pruneExpiredSnoozes(): void {
 /** Convert graph output to the StoredFinding shape the frontend expects. */
 function toStoredFindings(
   threadId: string,
-  findings: Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[] }>,
+  findings: Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[]; affectedDocumentType?: string }>,
   proposedActions: Array<{ findingId: string; description: string; requiresConfirmation: boolean }>,
 ): StoredFinding[] {
   const now = new Date().toISOString();
@@ -89,6 +90,7 @@ function toStoredFindings(
       severity: f.severity as StoredFinding["severity"],
       category: "proactive",
       affectedDocumentId: docId,
+      affectedDocumentType: f.affectedDocumentType || null,
       affectedDocumentTitle: null,
       proposedActions: actions,
       createdAt: now,
@@ -292,7 +294,7 @@ app.post("/api/fleetgraph/analyze", async (req, res) => {
     // Check for non-throwing interrupt (MemorySaver pattern)
     if (isInterruptedResult(result)) {
       const payload = await extractInterruptPayloadFromState(proactiveGraph, config);
-      const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string }>;
+      const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[]; affectedDocumentType?: string }>;
       const actions = (payload?.proposedActions ?? []) as Array<{ findingId: string; description: string; requiresConfirmation: boolean }>;
       storedFindings = toStoredFindings(threadId, findings, actions);
       console.log(
@@ -349,7 +351,7 @@ cron.schedule(CRON_INTERVAL, async () => {
     // Check for non-throwing interrupt (MemorySaver pattern)
     if (isInterruptedResult(result)) {
       const payload = await extractInterruptPayloadFromState(proactiveGraph, config);
-      const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[] }>;
+      const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[]; affectedDocumentType?: string }>;
       const actions = (payload?.proposedActions ?? []) as Array<{ findingId: string; description: string; requiresConfirmation: boolean }>;
       const newFindings = toStoredFindings(threadId, findings, actions)
         .filter((f) => !dismissedFindingTitles.has(f.title));

@@ -22,6 +22,7 @@ function createFinding(overrides: Partial<Finding> = {}): Finding {
     severity: 'warning',
     category: 'sprint-health',
     affectedDocumentId: 'doc-123',
+    affectedDocumentType: 'issue',
     affectedDocumentTitle: 'Sprint 5',
     proposedActions: [{ id: 'action-1', label: 'Self-assign all', description: 'Assign to yourself' }],
     createdAt: new Date().toISOString(),

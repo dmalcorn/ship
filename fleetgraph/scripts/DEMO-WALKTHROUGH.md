@@ -55,37 +55,50 @@ START → resolve_context → [fetch_issues | fetch_sprint | fetch_team | fetch_
 - Each card shows:
   - A **severity badge** (red/yellow/blue)
   - **Title and description** explaining the problem
-  - **Evidence** — specific issue names or sprint references
-  - **Action button** (e.g., "Assign owners") and a **Dismiss** button
+  - Three action buttons: **"View {DocType}"** (blue), **"Snooze"**, and **"Dismiss"**
+
+- The panel is **resizable** — grab the right edge and drag to widen it (224px–600px) if finding descriptions are long.
 
 > *"This warning tells us there are unassigned issues in the current Ship Core sprint. It shows which specific issues are affected and recommends assigning owners."*
 
-**4. Demonstrate the human-in-the-loop gate (Confirm)**
+**4. Demonstrate "View in Ship" navigation**
 
-- On one of the finding cards, click the **primary action button** (e.g., "Assign owners").
-- The button shows a brief loading state, then changes to **"Done"** with a checkmark.
-- This calls `POST /api/fleetgraph/resume` with `decision: "confirm"` behind the scenes.
+- On one of the finding cards, click the **blue "View Issue" button** (or "View Sprint" depending on the finding's affected document type).
+- Ship navigates you to the affected document so you can fix it manually.
+- If the finding doesn't have a specific document link, the button says **"View Issues"** and takes you to the issues list.
 
-> *"When I click 'Assign owners', that sends a confirmation through the human-in-the-loop gate. FleetGraph doesn't make changes itself — it's a read-only agent. It surfaces the problem and I decide what to do. The 'confirm' tells the graph I've acknowledged this finding."*
+> *"When I click 'View Issue', Ship navigates me to the actual issue so I can fix it — assign an owner, update the status, whatever's needed. FleetGraph is a read-only agent. It surfaces problems but never makes changes itself."*
 
-**5. Demonstrate the human-in-the-loop gate (Dismiss)**
+**5. Demonstrate the Snooze action**
+
+- On another finding card, click the **"Snooze"** button (clock icon).
+- A **popover picker** appears with three options: **1 hour**, **4 hours**, **Next day**.
+- Click one of the options (e.g., "4 hours").
+- The card shows **"Snoozed for 4 hours"** in yellow text briefly, then slides out.
+- The finding will reappear after the snooze duration expires.
+- This calls `POST /api/fleetgraph/resume` with `decision: "snooze"` and `snoozeDurationMs`.
+
+> *"I know about this issue but I'm not ready to deal with it yet. I'll snooze it for 4 hours — it'll come back later. This is useful when you're in a meeting or focused on something else."*
+
+**6. Demonstrate the Dismiss action**
 
 - On another finding card, click **"Dismiss"**.
 - The card slides out with a fade animation.
-- This calls the same resume endpoint with `decision: "dismiss"`.
+- This calls the resume endpoint with `decision: "dismiss"` and `findingId`.
+- Dismissed findings are tracked by title, so they won't reappear on the next proactive scan.
 
-> *"I can also dismiss findings I don't think are actionable. This one about backlog items — I'll dismiss it because those are intentionally unscheduled."*
+> *"I can also dismiss findings I don't think are actionable. This one about backlog items — I'll dismiss it because those are intentionally unscheduled. It won't come back on the next scan."*
 
-**6. Show the empty state (optional)**
+**7. Show the empty state (optional)**
 
-- If all findings are dismissed/confirmed, the panel shows:
+- If all findings are dismissed/snoozed, the panel shows:
   - A **green checkmark** icon
   - **"No findings — you're in good shape."**
   - A countdown: **"Next scan in ~3m"**
 
 > *"Once all findings are handled, we get a clean bill of health. The next proactive scan runs in about 3 minutes and will check everything again."*
 
-**7. (Optional) Show LangSmith trace**
+**8. (Optional) Show LangSmith trace**
 
 - Switch to a browser tab with LangSmith open.
 - Find the most recent proactive run trace.
@@ -208,7 +221,10 @@ START → resolve_context (with document) → [fetch_issues | fetch_sprint | fet
 |--------|---------------|
 | Red badge on icon | "The proactive graph runs every 3 minutes and surfaces findings automatically" |
 | Findings panel | "Findings are sorted by severity — critical issues bubble to the top" |
-| Clicking Confirm | "This is the human-in-the-loop gate — FleetGraph is read-only, it never makes changes" |
+| Resizing the panel | "You can drag the right edge to widen the panel if descriptions are long" |
+| Clicking View Issue | "This navigates to the actual document so I can fix the problem — FleetGraph is read-only" |
+| Clicking Snooze | "Snooze hides the finding temporarily — it comes back when the timer expires" |
+| Clicking Dismiss | "Dismissed findings are tracked by title so they won't reappear on the next scan" |
 | FAB appearing | "The chat button only shows on issues and sprints — context-aware by design" |
 | Chat response | "It pulled in sprint data, team info, and related issues to answer my specific question" |
 | Follow-up question | "Multi-turn conversation — it remembers the context from my first question" |

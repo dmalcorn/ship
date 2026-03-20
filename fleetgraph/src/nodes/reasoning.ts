@@ -27,6 +27,10 @@ const FindingSchema = z.object({
     .array(z.string())
     .default([])
     .describe("UUIDs of the affected issue(s) from the data — use the exact 'id' field values"),
+  affectedDocumentType: z
+    .string()
+    .default("issue")
+    .describe("The type of the primary affected document: issue, sprint, project, program, wiki, or person"),
 });
 
 const AnalysisOutputSchema = z.object({

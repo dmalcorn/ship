@@ -27,6 +27,7 @@ function makeFinding(overrides: Record<string, unknown> = {}) {
     severity: 'warning',
     category: 'quality',
     affectedDocumentId: null,
+    affectedDocumentType: null,
     affectedDocumentTitle: null,
     proposedActions: [{ id: 'action-001', label: 'Fix it', description: 'Take action' }],
     createdAt: new Date().toISOString(),
