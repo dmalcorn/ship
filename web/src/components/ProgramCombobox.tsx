@@ -119,7 +119,7 @@ export function ProgramCombobox({
         >
           <Command
             className="flex flex-col"
-            filter={(value, search) => {
+            filter={(value: string, search: string) => {
               const program = programs.find((p) => p.id === value);
               if (!program) return 0;
               const name = (program.name || '').toLowerCase();

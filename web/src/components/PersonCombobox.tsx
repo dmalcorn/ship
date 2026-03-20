@@ -78,7 +78,7 @@ export function PersonCombobox({
         >
           <Command
             className="flex flex-col"
-            filter={(value, search) => {
+            filter={(value: string, search: string) => {
               const person = people.find((p) => p.user_id === value);
               if (!person) return 0;
               const name = person.name.toLowerCase();

@@ -98,7 +98,7 @@ export function MultiPersonCombobox({
         >
           <Command
             className="flex flex-col"
-            filter={(cmdValue, cmdSearch) => {
+            filter={(cmdValue: string, cmdSearch: string) => {
               const person = people.find((p) => p.user_id === cmdValue);
               if (!person) return 0;
               const name = person.name.toLowerCase();

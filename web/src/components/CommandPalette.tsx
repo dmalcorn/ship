@@ -254,7 +254,7 @@ export function CommandPalette({ open, onOpenChange, currentDocument, onConvertD
         </Tooltip>
         <Command
           className="rounded-lg border border-border bg-background shadow-2xl"
-          onKeyDown={(e) => {
+          onKeyDown={(e: React.KeyboardEvent) => {
             if (e.key === 'Escape') onOpenChange(false);
           }}
         >

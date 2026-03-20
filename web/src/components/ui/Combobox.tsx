@@ -72,7 +72,7 @@ export function Combobox({
         >
           <Command
             className="flex flex-col"
-            filter={(value, search) => {
+            filter={(value: string, search: string) => {
               const option = options.find((o) => o.value === value);
               if (!option) return 0;
               const label = option.label.toLowerCase();

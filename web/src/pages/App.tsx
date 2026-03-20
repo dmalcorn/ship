@@ -1129,7 +1129,7 @@ function IssuesList({
           <li key={issue.id} data-testid="issue-item" className="group relative">
             <Link
               to={`/documents/${issue.id}`}
-              onContextMenu={(e) => handleContextMenu(e, issue)}
+              onContextMenu={(e: React.MouseEvent) => handleContextMenu(e, issue)}
               className={cn(
                 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
                 activeId === issue.id

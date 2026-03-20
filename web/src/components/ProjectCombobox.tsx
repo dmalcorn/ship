@@ -151,7 +151,7 @@ export function ProjectCombobox({
         >
           <Command
             className="flex flex-col"
-            filter={(value, search) => {
+            filter={(value: string, search: string) => {
               const project = projects.find((p) => p.id === value);
               if (!project) return 0;
               const title = (project.title || '').toLowerCase();
