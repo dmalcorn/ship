@@ -10,6 +10,7 @@ export interface Finding {
   description: string;
   evidence: string;
   recommendation: string;
+  affectedDocumentIds?: string[];
 }
 
 /**

@@ -58,6 +58,9 @@ export function FindingCard({ finding, onDismissed }: FindingCardProps) {
   const handleViewInShip = useCallback(() => {
     if (finding.affectedDocumentId) {
       navigate(`/documents/${finding.affectedDocumentId}`);
+    } else {
+      // No specific document — go to issues list where the user can find affected items
+      navigate('/issues');
     }
   }, [finding.affectedDocumentId, navigate]);
 
@@ -112,15 +115,13 @@ export function FindingCard({ finding, onDismissed }: FindingCardProps) {
       ) : (
         /* Actions */
         <div className="flex items-center gap-2">
-          {finding.affectedDocumentId && (
-            <button
-              onClick={handleViewInShip}
-              className="flex items-center gap-1 bg-[#005ea2] text-white text-xs px-2.5 py-1 rounded border-none cursor-pointer hover:bg-[#004d84] transition-colors"
-            >
-              <ExternalLinkIcon />
-              View in Ship
-            </button>
-          )}
+          <button
+            onClick={handleViewInShip}
+            className="flex items-center gap-1 bg-[#005ea2] text-white text-xs px-2.5 py-1 rounded border-none cursor-pointer hover:bg-[#004d84] transition-colors"
+          >
+            <ExternalLinkIcon />
+            {finding.affectedDocumentId ? 'View Issue' : 'View Issues'}
+          </button>
 
           {/* Snooze with popover */}
           <div ref={snoozeRef} className="relative">

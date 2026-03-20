@@ -23,6 +23,9 @@ const FindingSchema = z.object({
   recommendation: z
     .string()
     .describe("Actionable recommendation to resolve this finding"),
+  affectedDocumentIds: z
+    .array(z.string())
+    .describe("UUIDs of the affected issue(s) from the data — use the exact 'id' field values"),
 });
 
 const AnalysisOutputSchema = z.object({

@@ -54,6 +54,10 @@ let storedFindings: StoredFinding[] = [];
 // --- Snoozed findings (findingId → expiry timestamp) ---
 const snoozedFindings = new Map<string, number>();
 
+// --- Dismissed finding titles (persists across cron runs so dismissed findings don't reappear) ---
+// Uses title instead of ID because the LLM generates new IDs each run
+const dismissedFindingTitles = new Set<string>();
+
 /** Remove expired snoozes */
 function pruneExpiredSnoozes(): void {
   const now = Date.now();
@@ -67,7 +71,7 @@ function pruneExpiredSnoozes(): void {
 /** Convert graph output to the StoredFinding shape the frontend expects. */
 function toStoredFindings(
   threadId: string,
-  findings: Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string }>,
+  findings: Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[] }>,
   proposedActions: Array<{ findingId: string; description: string; requiresConfirmation: boolean }>,
 ): StoredFinding[] {
   const now = new Date().toISOString();
@@ -75,6 +79,8 @@ function toStoredFindings(
     const actions = proposedActions
       .filter((a) => a.findingId === f.id)
       .map((a) => ({ id: randomUUID(), label: a.description, description: a.description }));
+    // Use the first affected document ID if available
+    const docId = f.affectedDocumentIds?.[0] || null;
     return {
       id: f.id,
       threadId,
@@ -82,7 +88,7 @@ function toStoredFindings(
       description: f.description,
       severity: f.severity as StoredFinding["severity"],
       category: "proactive",
-      affectedDocumentId: null,
+      affectedDocumentId: docId,
       affectedDocumentTitle: null,
       proposedActions: actions,
       createdAt: now,
@@ -217,13 +223,22 @@ app.post("/api/fleetgraph/resume", async (req, res) => {
 
     // Confirm or dismiss: remove this finding from the store
     if (findingId) {
+      // Record the title so this finding doesn't reappear on the next cron run
+      const dismissed = storedFindings.find((f) => f.id === findingId);
+      if (dismissed) {
+        dismissedFindingTitles.add(dismissed.title);
+      }
       storedFindings = storedFindings.filter((f) => f.id !== findingId);
       snoozedFindings.delete(findingId); // clear any snooze too
       console.log(`[resume] finding ${findingId} ${decision}ed — ${storedFindings.length} findings remaining`);
     } else {
-      // Legacy: no findingId means remove all findings for this thread
-      storedFindings = storedFindings.filter((f) => f.threadId !== threadId);
-      console.log(`[resume] all findings for thread ${threadId} ${decision}ed`);
+      // Legacy: no findingId — only remove the SINGLE FIRST finding for this thread (not all)
+      const first = storedFindings.find((f) => f.threadId === threadId);
+      if (first) {
+        dismissedFindingTitles.add(first.title);
+        storedFindings = storedFindings.filter((f) => f.id !== first.id);
+        console.log(`[resume] finding ${first.id} ${decision}ed (legacy path) — ${storedFindings.length} findings remaining`);
+      }
     }
 
     // Resume the graph if all findings for this thread have been acted on
@@ -338,19 +353,21 @@ cron.schedule(CRON_INTERVAL, async () => {
     // Check for non-throwing interrupt (MemorySaver pattern)
     if (isInterruptedResult(result)) {
       const payload = await extractInterruptPayloadFromState(proactiveGraph, config);
-      const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string }>;
+      const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[] }>;
       const actions = (payload?.proposedActions ?? []) as Array<{ findingId: string; description: string; requiresConfirmation: boolean }>;
-      storedFindings = toStoredFindings(threadId, findings, actions);
+      const newFindings = toStoredFindings(threadId, findings, actions)
+        .filter((f) => !dismissedFindingTitles.has(f.title));
+      storedFindings = newFindings;
       console.log(
         `[cron] findings detected — paused at confirmation_gate (thread: ${threadId})`
       );
       console.log(
-        `[cron] ${findings.length} finding(s) stored and awaiting review`
+        `[cron] ${findings.length} raw finding(s), ${newFindings.length} after filtering dismissed — stored and awaiting review`
       );
       return;
     }
 
-    // Clean run — clear stale findings
+    // Clean run — clear stale findings (but keep dismissed titles so they don't return)
     storedFindings = [];
     console.log("[cron] clean run, no issues detected");
   } catch (err) {
