@@ -59,14 +59,24 @@ export function FindingCard({ finding, onDismissed }: FindingCardProps) {
     ? finding.affectedDocumentType.charAt(0).toUpperCase() + finding.affectedDocumentType.slice(1)
     : 'Document';
 
+  // Map document types to their list-view routes
+  const listRouteForType: Record<string, string> = {
+    issue: '/issues',
+    project: '/projects',
+    program: '/programs',
+    sprint: '/issues', // sprints redirect to /team/allocation; fall back to /issues
+  };
+
   const handleViewInShip = useCallback(() => {
     if (finding.affectedDocumentId) {
+      // Single affected document — navigate directly to it
       navigate(`/documents/${finding.affectedDocumentId}`);
     } else {
-      // No specific document — go to issues list where the user can find affected items
-      navigate('/issues');
+      // Multiple affected documents or none — navigate to list view
+      const route = listRouteForType[finding.affectedDocumentType || ''] || '/issues';
+      navigate(route);
     }
-  }, [finding.affectedDocumentId, navigate]);
+  }, [finding.affectedDocumentId, finding.affectedDocumentType, navigate]);
 
   const handleDismiss = useCallback(() => {
     setSlidingOut(true);
@@ -124,7 +134,9 @@ export function FindingCard({ finding, onDismissed }: FindingCardProps) {
             className="flex items-center gap-1 bg-[#005ea2] text-white text-xs px-2.5 py-1 rounded border-none cursor-pointer hover:bg-[#004d84] transition-colors"
           >
             <ExternalLinkIcon />
-            {finding.affectedDocumentId ? `View ${docTypeLabel}` : 'View Issues'}
+            {finding.affectedDocumentId
+              ? `View ${docTypeLabel}`
+              : `View ${docTypeLabel}s`}
           </button>
 
           {/* Snooze with popover */}

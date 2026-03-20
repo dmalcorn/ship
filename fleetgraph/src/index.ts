@@ -47,6 +47,7 @@ interface StoredFinding {
   affectedDocumentId: string | null;
   affectedDocumentType: string | null;
   affectedDocumentTitle: string | null;
+  affectedDocumentCount: number;
   proposedActions: Array<{ id: string; label: string; description: string }>;
   createdAt: string;
 }
@@ -80,8 +81,9 @@ function toStoredFindings(
     const actions = proposedActions
       .filter((a) => a.findingId === f.id)
       .map((a) => ({ id: randomUUID(), label: a.description, description: a.description }));
-    // Use the first affected document ID if available
-    const docId = f.affectedDocumentIds?.[0] || null;
+    // Single affected document → link directly; multiple → navigate to list view
+    const docIds = f.affectedDocumentIds || [];
+    const docId = docIds.length === 1 ? (docIds[0] ?? null) : null;
     return {
       id: f.id,
       threadId,
@@ -92,6 +94,7 @@ function toStoredFindings(
       affectedDocumentId: docId,
       affectedDocumentType: f.affectedDocumentType || null,
       affectedDocumentTitle: null,
+      affectedDocumentCount: docIds.length,
       proposedActions: actions,
       createdAt: now,
     };

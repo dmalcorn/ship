@@ -16,6 +16,7 @@ export interface Finding {
   affectedDocumentId: string | null;
   affectedDocumentType: string | null;
   affectedDocumentTitle: string | null;
+  affectedDocumentCount: number;
   proposedActions: ProposedAction[];
   createdAt: string;
 }

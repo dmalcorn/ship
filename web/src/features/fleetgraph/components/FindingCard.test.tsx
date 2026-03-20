@@ -24,6 +24,7 @@ function createFinding(overrides: Partial<Finding> = {}): Finding {
     affectedDocumentId: 'doc-123',
     affectedDocumentType: 'issue',
     affectedDocumentTitle: 'Sprint 5',
+    affectedDocumentCount: 1,
     proposedActions: [{ id: 'action-1', label: 'Self-assign all', description: 'Assign to yourself' }],
     createdAt: new Date().toISOString(),
     ...overrides,
@@ -46,10 +47,11 @@ describe('FindingCard', () => {
     vi.clearAllMocks();
   });
 
-  it('renders finding title, description, and severity', () => {
+  it('renders finding title, recommendation, and severity', () => {
     renderCard(createFinding());
     expect(screen.getByText('Unassigned issues in active sprint')).toBeInTheDocument();
-    expect(screen.getByText('3 issues have no assignee in the current sprint.')).toBeInTheDocument();
+    // Recommendation shows first proposed action label, not the description
+    expect(screen.getByText('Self-assign all')).toBeInTheDocument();
     expect(screen.getByText('warning')).toBeInTheDocument();
   });
 
@@ -60,47 +62,24 @@ describe('FindingCard', () => {
     expect(severityEl?.textContent).toBe('critical');
   });
 
-  it('shows context-specific action label from proposedActions', () => {
+  it('shows first proposed action label as recommendation text', () => {
     renderCard(createFinding());
     expect(screen.getByText('Self-assign all')).toBeInTheDocument();
   });
 
-  it('falls back to "Confirm" label when no proposedActions', () => {
+  it('falls back to description when no proposedActions', () => {
     renderCard(createFinding({ proposedActions: [] }));
-    expect(screen.getByText('Confirm')).toBeInTheDocument();
+    expect(screen.getByText('3 issues have no assignee in the current sprint.')).toBeInTheDocument();
   });
 
-  it('renders affected document link', () => {
+  it('shows "View Issue" button for single affected document', () => {
     renderCard(createFinding());
-    expect(screen.getByText('Sprint 5')).toBeInTheDocument();
+    expect(screen.getByText('View Issue')).toBeInTheDocument();
   });
 
-  it('does not render document link when no affected document', () => {
-    renderCard(createFinding({ affectedDocumentTitle: null, affectedDocumentId: null }));
-    expect(screen.queryByText('Sprint 5')).not.toBeInTheDocument();
-  });
-
-  it('calls resumeAction with confirm on confirm click', () => {
-    mockMutate.mockImplementation((_params, options) => {
-      options?.onSuccess?.();
-    });
-    renderCard(createFinding());
-    fireEvent.click(screen.getByText('Self-assign all'));
-    expect(mockMutate).toHaveBeenCalledWith(
-      { threadId: 'thread-1', decision: 'confirm' },
-      expect.any(Object)
-    );
-  });
-
-  it('shows "Done" badge after successful confirm', async () => {
-    mockMutate.mockImplementation((_params, options) => {
-      options?.onSuccess?.();
-    });
-    renderCard(createFinding());
-    fireEvent.click(screen.getByText('Self-assign all'));
-    await waitFor(() => {
-      expect(screen.getByText('Done')).toBeInTheDocument();
-    });
+  it('shows "View Issues" button when no specific document', () => {
+    renderCard(createFinding({ affectedDocumentId: null, affectedDocumentType: 'issue', affectedDocumentCount: 3 }));
+    expect(screen.getByText('View Issues')).toBeInTheDocument();
   });
 
   it('adds slide-out class on dismiss click and calls onDismissed after transition', async () => {
@@ -117,10 +96,10 @@ describe('FindingCard', () => {
     vi.useRealTimers();
   });
 
-  it('fires resume mutation with dismiss decision on dismiss click', () => {
+  it('fires resume mutation with dismiss decision and findingId on dismiss click', () => {
     renderCard(createFinding());
     fireEvent.click(screen.getByLabelText('Dismiss finding: Unassigned issues in active sprint'));
-    expect(mockMutate).toHaveBeenCalledWith({ threadId: 'thread-1', decision: 'dismiss' });
+    expect(mockMutate).toHaveBeenCalledWith({ threadId: 'thread-1', decision: 'dismiss', findingId: 'finding-1' });
   });
 
   it('has role="article" for accessibility', () => {

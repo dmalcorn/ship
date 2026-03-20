@@ -41,6 +41,7 @@ function makeFindingsData(count: number, lastScanAt?: string): { data: FindingsR
     affectedDocumentId: null,
     affectedDocumentType: null,
     affectedDocumentTitle: null,
+    affectedDocumentCount: 0,
     proposedActions: [] as { id: string; label: string; description: string }[],
     createdAt: new Date().toISOString(),
   }));
