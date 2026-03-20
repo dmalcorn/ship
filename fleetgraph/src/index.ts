@@ -232,13 +232,9 @@ app.post("/api/fleetgraph/resume", async (req, res) => {
       snoozedFindings.delete(findingId); // clear any snooze too
       console.log(`[resume] finding ${findingId} ${decision}ed — ${storedFindings.length} findings remaining`);
     } else {
-      // Legacy: no findingId — only remove the SINGLE FIRST finding for this thread (not all)
-      const first = storedFindings.find((f) => f.threadId === threadId);
-      if (first) {
-        dismissedFindingTitles.add(first.title);
-        storedFindings = storedFindings.filter((f) => f.id !== first.id);
-        console.log(`[resume] finding ${first.id} ${decision}ed (legacy path) — ${storedFindings.length} findings remaining`);
-      }
+      // Legacy: no findingId — cannot identify which finding was acted on, so do nothing.
+      // The new frontend always sends findingId; this path only runs for stale clients.
+      console.warn(`[resume] no findingId provided — cannot identify finding to ${decision}. Ignoring.`);
     }
 
     // Resume the graph if all findings for this thread have been acted on
