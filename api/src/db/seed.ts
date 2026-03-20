@@ -633,7 +633,17 @@ async function seed() {
       { title: 'Create mobile app', state: 'backlog', sprintOffset: null, priority: 'low', estimate: 40 },
       { title: 'Add AI-powered suggestions', state: 'backlog', sprintOffset: null, priority: 'low', estimate: 16 },
       { title: 'Build integration with Slack', state: 'backlog', sprintOffset: null, priority: 'medium', estimate: 8 },
-    ];
+
+      // --- FleetGraph detection targets ---
+      // Unassigned issues in current sprint (triggers: unassigned issues warning)
+      { title: 'Fix pagination edge cases', state: 'todo', sprintOffset: 0, priority: 'high', estimate: 4, unassigned: true },
+      { title: 'Update API rate limiting', state: 'todo', sprintOffset: 0, priority: 'medium', estimate: 3, unassigned: true },
+      // Security issue without owner (triggers: unowned security issues critical)
+      { title: 'Fix XSS vulnerability in editor input', state: 'todo', sprintOffset: 0, priority: 'urgent', estimate: 6, unassigned: true },
+      // High-priority unscheduled work (triggers: unscheduled high-priority warning)
+      { title: 'Resolve authentication token expiry bug', state: 'todo', sprintOffset: null, priority: 'urgent', estimate: 4 },
+      { title: 'Database connection pool exhaustion', state: 'todo', sprintOffset: null, priority: 'high', estimate: 6 },
+    ] as Array<{ title: string; state: string; sprintOffset: number | null; priority: string; estimate: number; unassigned?: boolean }>;
 
     // Generic issues for other programs - expanded for better testing
     const genericIssueTemplates = [
@@ -680,7 +690,7 @@ async function seed() {
     const shipCoreTeam = programTeams[shipCoreProgram.id]!;
     for (let i = 0; i < shipCoreIssues.length; i++) {
       const issue = shipCoreIssues[i]!;
-      const assignee = allUsers[shipCoreTeam[i % shipCoreTeam.length]!]!;
+      const assignee = issue.unassigned ? null : allUsers[shipCoreTeam[i % shipCoreTeam.length]!]!;
 
       // Find the sprint based on offset
       let sprintId: string | null = null;
@@ -707,7 +717,7 @@ async function seed() {
           state: issue.state,
           priority: issue.priority,
           source: 'internal',
-          assignee_id: assignee.id,
+          assignee_id: assignee ? assignee.id : null,
           feedback_status: null,
           rejection_reason: null,
         };

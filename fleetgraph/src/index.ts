@@ -36,6 +36,47 @@ const CRON_INTERVAL = process.env.FLEETGRAPH_CRON_INTERVAL || "*/3 * * * *";
 let lastRunTimestamp: string | null = null;
 let proactiveRunning = false;
 
+// --- In-memory findings store (populated by proactive cron, served to frontend) ---
+interface StoredFinding {
+  id: string;
+  threadId: string;
+  title: string;
+  description: string;
+  severity: "critical" | "warning" | "info";
+  category: string;
+  affectedDocumentId: string | null;
+  affectedDocumentTitle: string | null;
+  proposedActions: Array<{ id: string; label: string; description: string }>;
+  createdAt: string;
+}
+let storedFindings: StoredFinding[] = [];
+
+/** Convert graph output to the StoredFinding shape the frontend expects. */
+function toStoredFindings(
+  threadId: string,
+  findings: Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string }>,
+  proposedActions: Array<{ findingId: string; description: string; requiresConfirmation: boolean }>,
+): StoredFinding[] {
+  const now = new Date().toISOString();
+  return findings.map((f) => {
+    const actions = proposedActions
+      .filter((a) => a.findingId === f.id)
+      .map((a) => ({ id: randomUUID(), label: a.description, description: a.description }));
+    return {
+      id: f.id,
+      threadId,
+      title: f.title,
+      description: f.description,
+      severity: f.severity as StoredFinding["severity"],
+      category: "proactive",
+      affectedDocumentId: null,
+      affectedDocumentTitle: null,
+      proposedActions: actions,
+      createdAt: now,
+    };
+  });
+}
+
 // --- Build graphs ---
 const proactiveGraph = buildProactiveGraph();
 const onDemandGraph = buildOnDemandGraph();
@@ -52,6 +93,17 @@ app.get("/health", (_req, res) => {
     tracing: process.env.LANGSMITH_TRACING === "true",
     uptime: process.uptime(),
     lastRunTimestamp,
+  });
+});
+
+/**
+ * Findings endpoint — returns proactive findings stored in memory.
+ * Polled by the Ship frontend every 30 seconds.
+ */
+app.get("/api/fleetgraph/findings", (_req, res) => {
+  res.json({
+    findings: storedFindings,
+    lastScanAt: lastRunTimestamp,
   });
 });
 
@@ -157,6 +209,11 @@ app.post("/api/fleetgraph/resume", async (req, res) => {
 
     console.log(`[resume] thread ${threadId} resumed with decision: ${decision}`);
 
+    // Remove findings for this thread from the store on dismiss, or mark confirmed
+    if (decision === "dismiss") {
+      storedFindings = storedFindings.filter((f) => f.threadId !== threadId);
+    }
+
     res.json({
       threadId,
       status: "resumed",
@@ -192,6 +249,9 @@ app.post("/api/fleetgraph/analyze", async (req, res) => {
     // Check for non-throwing interrupt (MemorySaver pattern)
     if (isInterruptedResult(result)) {
       const payload = await extractInterruptPayloadFromState(proactiveGraph, config);
+      const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string }>;
+      const actions = (payload?.proposedActions ?? []) as Array<{ findingId: string; description: string; requiresConfirmation: boolean }>;
+      storedFindings = toStoredFindings(threadId, findings, actions);
       console.log(
         `[analyze] paused at confirmation_gate — thread ${threadId}`
       );
@@ -204,6 +264,7 @@ app.post("/api/fleetgraph/analyze", async (req, res) => {
     }
 
     // Clean run or graceful degrade — no interrupt
+    storedFindings = [];
     res.json({
       threadId,
       status: "complete",
@@ -245,15 +306,20 @@ cron.schedule(CRON_INTERVAL, async () => {
     // Check for non-throwing interrupt (MemorySaver pattern)
     if (isInterruptedResult(result)) {
       const payload = await extractInterruptPayloadFromState(proactiveGraph, config);
+      const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string }>;
+      const actions = (payload?.proposedActions ?? []) as Array<{ findingId: string; description: string; requiresConfirmation: boolean }>;
+      storedFindings = toStoredFindings(threadId, findings, actions);
       console.log(
         `[cron] findings detected — paused at confirmation_gate (thread: ${threadId})`
       );
       console.log(
-        `[cron] ${(payload?.findings as unknown[])?.length ?? 0} finding(s) awaiting review via POST /api/fleetgraph/resume`
+        `[cron] ${findings.length} finding(s) stored and awaiting review`
       );
       return;
     }
 
+    // Clean run — clear stale findings
+    storedFindings = [];
     console.log("[cron] clean run, no issues detected");
   } catch (err) {
     console.error("[cron] proactive run failed:", err);

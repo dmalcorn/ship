@@ -7,10 +7,12 @@ import { shipApi } from "../utils/ship-api.js";
  */
 function extractIssueFields(issue: Record<string, unknown>): Record<string, unknown> {
   const props = issue.properties as Record<string, unknown> | undefined;
+  // Ship stores issue status in properties.state (not .status)
+  const status = props?.state ?? props?.status;
   return {
     id: issue.id,
     title: issue.title,
-    status: props?.status,
+    status,
     assignee_id: props?.assignee_id,
     priority: props?.priority,
     updated_at: issue.updated_at,
@@ -24,7 +26,8 @@ function extractIssueFields(issue: Record<string, unknown>): Record<string, unkn
 function filterActive(issues: Record<string, unknown>[]): Record<string, unknown>[] {
   return issues.filter((issue) => {
     const props = issue.properties as Record<string, unknown> | undefined;
-    const status = (props?.status as string) || "";
+    // Ship stores issue status in properties.state (not .status)
+    const status = (props?.state as string) || (props?.status as string) || "";
     return status !== "done" && status !== "cancelled";
   });
 }
