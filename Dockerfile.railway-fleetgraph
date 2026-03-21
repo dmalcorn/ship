@@ -11,7 +11,7 @@ COPY shared/package.json ./shared/
 COPY fleetgraph/package.json ./fleetgraph/
 
 # Install deps
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy source files
 COPY shared/ ./shared/

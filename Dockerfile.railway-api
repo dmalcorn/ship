@@ -12,7 +12,7 @@ COPY api/package.json ./api/
 COPY web/package.json ./web/
 
 # Install deps
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy source files
 COPY shared/ ./shared/
