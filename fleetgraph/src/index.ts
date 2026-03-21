@@ -602,7 +602,6 @@ cron.schedule(CRON_INTERVAL, async () => {
       console.log("[cron] data unchanged — skipping graph invocation");
       return;
     }
-    previousDataHash = currentHash;
     console.log("[cron] data changed (or first run) — invoking proactive graph");
 
     const threadId = `proactive-${Date.now()}`;
@@ -626,6 +625,9 @@ cron.schedule(CRON_INTERVAL, async () => {
         .filter((f) => !dismissedKeys.has(buildCompositeKey(f)));
       await enrichFindingsWithPrograms(newFindings);
       storedFindings = newFindings;
+      // Only cache the hash when findings exist — this ensures re-analysis on next cron
+      // if the LLM flakes and returns "clean" on the same data.
+      previousDataHash = currentHash;
       console.log(
         `[cron] findings detected — paused at confirmation_gate (thread: ${threadId})`
       );
@@ -635,9 +637,10 @@ cron.schedule(CRON_INTERVAL, async () => {
       return;
     }
 
-    // Clean run — clear stale findings (but keep dismissed keys so they don't return)
+    // Clean run — don't cache hash so next cron re-analyzes the same data
+    // (LLM may have missed findings on this pass)
     storedFindings = [];
-    console.log("[cron] clean run, no issues detected");
+    console.log("[cron] clean run, no issues detected — will re-analyze next cycle");
   } catch (err) {
     console.error("[cron] proactive run failed:", err);
   } finally {
