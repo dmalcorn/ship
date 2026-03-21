@@ -10,22 +10,51 @@ const model = new ChatAnthropic({
 });
 
 /**
- * Invoke the model with a forced tool call, bypassing withStructuredOutput
- * which returns {} on this LangChain version. Uses bindTools + tool_choice
- * and manually extracts the tool call input.
+ * Invoke the model with a forced tool call using raw Anthropic tool format.
+ * Bypasses LangChain's broken Zod-to-JSON-Schema conversion.
  */
 async function invokeWithTool(prompt: string, toolName: string, label: string): Promise<Finding[]> {
-  const toolSchema = {
+  // Define tool in Anthropic's native format (bypasses LangChain's Zod conversion)
+  const nativeTool = {
     name: toolName,
     description: "Output structured project health findings",
-    schema: AnalysisOutputSchema,
+    input_schema: {
+      type: "object" as const,
+      required: ["findings", "summary"],
+      properties: {
+        findings: {
+          type: "array",
+          description: "Array of detected quality issues",
+          items: {
+            type: "object",
+            required: ["id", "severity", "category", "title", "description", "evidence", "recommendation"],
+            properties: {
+              id: { type: "string", description: "Unique finding identifier, e.g. finding-1" },
+              severity: { type: "string", enum: ["info", "warning", "critical"] },
+              category: {
+                type: "string",
+                enum: ["unassigned", "missing_sprint", "stale", "duplicate", "empty_sprint",
+                       "security", "overloaded", "blocked", "missing_ticket_number",
+                       "unscheduled_high_priority", "other"],
+              },
+              title: { type: "string" },
+              description: { type: "string" },
+              evidence: { type: "string" },
+              recommendation: { type: "string" },
+              affectedDocumentIds: { type: "array", items: { type: "string" }, default: [] },
+              affectedDocumentType: { type: "string", default: "issue" },
+            },
+          },
+        },
+        summary: { type: "string", description: "Overall project health summary" },
+      },
+    },
   };
 
-  const boundModel = model.bindTools([toolSchema], {
-    tool_choice: { type: "tool" as const, name: toolName },
-  });
-
-  const response = await boundModel.invoke([new HumanMessage(prompt)]);
+  const response = await model.invoke([new HumanMessage(prompt)], {
+    tools: [nativeTool],
+    tool_choice: { type: "tool", name: toolName },
+  } as Record<string, unknown>);
 
   // Extract tool call input from response
   const toolCalls = response.tool_calls;
