@@ -266,23 +266,29 @@ ${(() => {
 }`;
 
     console.log(`[analyze_health] invoking LLM with ${issuesSummary.length} issues, prompt ~${Math.round(jsonPrompt.length / 1000)}k chars`);
-    const response = await model.invoke([{ role: "user", content: jsonPrompt }]);
+    // Prefill assistant response with "{" to force JSON output
+    const response = await model.invoke([
+      { role: "user", content: jsonPrompt },
+      { role: "assistant", content: "{" },
+    ]);
 
     // Extract text from response (may be string or array of content blocks)
-    let text: string;
+    let rawText: string;
     if (typeof response.content === "string") {
-      text = response.content;
+      rawText = response.content;
     } else if (Array.isArray(response.content)) {
-      text = response.content.map((block: unknown) => {
+      rawText = response.content.map((block: unknown) => {
         const b = block as Record<string, unknown>;
         return b.type === "text" ? (b.text as string) : "";
       }).join("");
     } else {
-      text = String(response.content);
+      rawText = String(response.content);
     }
+    // Prepend the "{" we used as assistant prefill
+    const text = "{" + rawText;
     console.log(`[analyze_health] raw LLM response (first 300 chars): ${text.slice(0, 300)}`);
 
-    const { findings, summary } = extractFindings(text, "analyze_health");
+    const { findings } = extractFindings(text, "analyze_health");
     const severity = determineSeverity(findings);
 
     console.log(
@@ -474,20 +480,23 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
   "summary": "Overall analysis summary answering the user's question"
 }`;
 
-    const response = await model.invoke([{ role: "user", content: jsonPrompt }]);
-    let ctxText: string;
+    const response = await model.invoke([
+      { role: "user", content: jsonPrompt },
+      { role: "assistant", content: "{" },
+    ]);
+    let ctxRaw: string;
     if (typeof response.content === "string") {
-      ctxText = response.content;
+      ctxRaw = response.content;
     } else if (Array.isArray(response.content)) {
-      ctxText = response.content.map((block: unknown) => {
+      ctxRaw = response.content.map((block: unknown) => {
         const b = block as Record<string, unknown>;
         return b.type === "text" ? (b.text as string) : "";
       }).join("");
     } else {
-      ctxText = String(response.content);
+      ctxRaw = String(response.content);
     }
 
-    const { findings } = extractFindings(ctxText, "analyze_context");
+    const { findings } = extractFindings("{" + ctxRaw, "analyze_context");
     const severity = determineSeverity(findings);
 
     return { findings, severity, errors: [] };
