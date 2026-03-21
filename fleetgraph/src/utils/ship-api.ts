@@ -56,6 +56,11 @@ async function shipWrite(method: string, path: string, body?: unknown): Promise<
     throw new Error(`shipWrite ${method} ${path}: HTTP ${res.status} ${res.statusText}`);
   }
 
+  // Some endpoints (e.g. DELETE) return 204 with no body
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return null;
+  }
+
   return res.json();
 }
 

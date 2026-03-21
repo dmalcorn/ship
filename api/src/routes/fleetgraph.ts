@@ -81,4 +81,8 @@ router.post('/analyze', authMiddleware, async (req: Request, res: Response) => {
   await proxyToFleetGraph(req, res);
 });
 
+router.post('/apply-action', authMiddleware, async (req: Request, res: Response) => {
+  await proxyToFleetGraph(req, res);
+});
+
 export default router;
