@@ -216,9 +216,24 @@ function toStoredFindings(
 }
 
 /** Batch-resolve program IDs for findings by looking up associations for affected documents. */
-async function enrichFindingsWithPrograms(findings: StoredFinding[]): Promise<void> {
-  // Collect unique affected document IDs
-  const docIds = [...new Set(findings.map((f) => f.affectedDocumentId).filter(Boolean))] as string[];
+async function enrichFindingsWithPrograms(
+  findings: StoredFinding[],
+  rawFindings?: Array<{ id: string; affectedDocumentIds?: string[] }>,
+): Promise<void> {
+  // Build a map from finding ID to first affected doc ID (for multi-ID findings where affectedDocumentId is null)
+  const findingToFirstDoc = new Map<string, string>();
+  if (rawFindings) {
+    for (const rf of rawFindings) {
+      const firstId = rf.affectedDocumentIds?.[0];
+      if (firstId) findingToFirstDoc.set(rf.id, firstId);
+    }
+  }
+
+  // Collect unique doc IDs: from stored findings + first doc of multi-ID findings
+  const docIds = [...new Set([
+    ...findings.map((f) => f.affectedDocumentId).filter(Boolean) as string[],
+    ...findingToFirstDoc.values(),
+  ])];
   if (docIds.length === 0) return;
 
   // Batch lookup: fetch associations for each doc to find its program
@@ -256,8 +271,10 @@ async function enrichFindingsWithPrograms(findings: StoredFinding[]): Promise<vo
 
   // Apply program IDs and prefixes to findings
   for (const f of findings) {
-    if (f.affectedDocumentId && docToProgram.has(f.affectedDocumentId)) {
-      const pid = docToProgram.get(f.affectedDocumentId)!;
+    // Use affectedDocumentId if available, otherwise fall back to first doc from raw findings
+    const lookupId = f.affectedDocumentId ?? findingToFirstDoc.get(f.id);
+    if (lookupId && docToProgram.has(lookupId)) {
+      const pid = docToProgram.get(lookupId)!;
       f.programId = pid;
       f.programPrefix = programPrefixes.get(pid) ?? null;
     }
@@ -569,7 +586,7 @@ app.post("/api/fleetgraph/analyze", async (req, res) => {
       const actions = (payload?.proposedActions ?? []) as Array<{ findingId: string; description: string; requiresConfirmation: boolean }>;
       const sprintCtx = (result.sprintData ?? null) as Record<string, unknown> | null;
       storedFindings = toStoredFindings(threadId, findings, actions, sprintCtx);
-      await enrichFindingsWithPrograms(storedFindings);
+      await enrichFindingsWithPrograms(storedFindings, findings);
       console.log(
         `[analyze] paused at confirmation_gate — thread ${threadId}`
       );
@@ -638,7 +655,7 @@ async function runProactiveHealthCheck(): Promise<void> {
       const sprintCtx = (result.sprintData ?? null) as Record<string, unknown> | null;
       const newFindings = toStoredFindings(threadId, findings, actions, sprintCtx)
         .filter((f) => !dismissedKeys.has(buildCompositeKey(f)));
-      await enrichFindingsWithPrograms(newFindings);
+      await enrichFindingsWithPrograms(newFindings, findings);
       storedFindings = newFindings;
       previousDataHash = currentHash;
       console.log(
