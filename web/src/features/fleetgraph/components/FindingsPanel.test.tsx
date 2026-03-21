@@ -43,6 +43,7 @@ function makeFindingsData(count: number, lastScanAt?: string): { data: FindingsR
     affectedDocumentTitle: null,
     affectedDocumentCount: 0,
     proposedActions: [] as { id: string; label: string; description: string }[],
+    automatedAction: null,
     createdAt: new Date().toISOString(),
   }));
   return {

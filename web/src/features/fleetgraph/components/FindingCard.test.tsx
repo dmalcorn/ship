@@ -13,6 +13,15 @@ vi.mock('../hooks/useResumeAction', () => ({
   }),
 }));
 
+// Mock useApplyAction
+const mockApplyAction = vi.fn();
+vi.mock('../hooks/useApplyAction', () => ({
+  useApplyAction: () => ({
+    mutate: mockApplyAction,
+    isPending: false,
+  }),
+}));
+
 function createFinding(overrides: Partial<Finding> = {}): Finding {
   return {
     id: 'finding-1',
@@ -26,6 +35,7 @@ function createFinding(overrides: Partial<Finding> = {}): Finding {
     affectedDocumentTitle: 'Sprint 5',
     affectedDocumentCount: 1,
     proposedActions: [{ id: 'action-1', label: 'Self-assign all', description: 'Assign to yourself' }],
+    automatedAction: null,
     createdAt: new Date().toISOString(),
     ...overrides,
   };
