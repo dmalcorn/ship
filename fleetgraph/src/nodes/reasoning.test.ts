@@ -55,6 +55,7 @@ describe("determineSeverity", () => {
       {
         id: "f-1",
         severity: "info",
+        category: "other",
         title: "t",
         description: "d",
         evidence: "e",
@@ -69,6 +70,7 @@ describe("determineSeverity", () => {
       {
         id: "f-1",
         severity: "info",
+        category: "other",
         title: "t",
         description: "d",
         evidence: "e",
@@ -77,6 +79,7 @@ describe("determineSeverity", () => {
       {
         id: "f-2",
         severity: "warning",
+        category: "other",
         title: "t",
         description: "d",
         evidence: "e",
@@ -91,6 +94,7 @@ describe("determineSeverity", () => {
       {
         id: "f-1",
         severity: "info",
+        category: "other",
         title: "t",
         description: "d",
         evidence: "e",
@@ -99,6 +103,7 @@ describe("determineSeverity", () => {
       {
         id: "f-2",
         severity: "critical",
+        category: "other",
         title: "t",
         description: "d",
         evidence: "e",
@@ -113,6 +118,7 @@ describe("determineSeverity", () => {
       {
         id: "f-1",
         severity: "warning",
+        category: "other",
         title: "t",
         description: "d",
         evidence: "e",
@@ -121,6 +127,7 @@ describe("determineSeverity", () => {
       {
         id: "f-2",
         severity: "critical",
+        category: "other",
         title: "t",
         description: "d",
         evidence: "e",
@@ -129,6 +136,7 @@ describe("determineSeverity", () => {
       {
         id: "f-3",
         severity: "info",
+        category: "other",
         title: "t",
         description: "d",
         evidence: "e",
@@ -195,6 +203,7 @@ describe("analyzeHealth", () => {
     const finding: Finding = {
       id: "finding-1",
       severity: "warning",
+      category: "unassigned",
       title: "Unassigned issue",
       description: "Issue has no owner",
       evidence: "Issue #abc: Fix login",

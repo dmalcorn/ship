@@ -45,6 +45,7 @@ const sampleFindings: Finding[] = [
   {
     id: "finding-1",
     severity: "warning",
+    category: "unassigned",
     title: "Unassigned issue",
     description: "Issue has no owner",
     evidence: "Issue #abc: Fix login",
@@ -53,6 +54,7 @@ const sampleFindings: Finding[] = [
   {
     id: "finding-2",
     severity: "critical",
+    category: "security",
     title: "Unowned security issue",
     description: "Security issue without assignee",
     evidence: "Issue #def: Fix XSS vulnerability",

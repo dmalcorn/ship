@@ -8,11 +8,28 @@ const model = new ChatAnthropic({
   maxTokens: 16384,
 });
 
+const DetectionCategorySchema = z.enum([
+  "unassigned",
+  "missing_sprint",
+  "stale",
+  "duplicate",
+  "empty_sprint",
+  "security",
+  "overloaded",
+  "blocked",
+  "missing_ticket_number",
+  "unscheduled_high_priority",
+  "other",
+]);
+
 const FindingSchema = z.object({
   id: z.string().describe("Unique finding identifier, e.g. finding-1"),
   severity: z
     .enum(["info", "warning", "critical"])
     .describe("Finding severity level"),
+  category: DetectionCategorySchema.describe(
+    "Detection category — must be one of: unassigned, missing_sprint, stale, duplicate, empty_sprint, security, overloaded, blocked, missing_ticket_number, unscheduled_high_priority, other"
+  ),
   title: z.string().describe("Short finding title"),
   description: z.string().describe("Detailed finding description"),
   evidence: z
@@ -86,37 +103,41 @@ Use unique IDs: "finding-1", "finding-2", etc.
 
 === DETECTION CATEGORIES ===
 
-1. UNASSIGNED ISSUES: Find any issues where assignee_id is null, undefined, or empty.
+IMPORTANT: Each finding MUST include a "category" field from this exact list:
+  unassigned, missing_sprint, stale, duplicate, empty_sprint, security,
+  overloaded, blocked, missing_ticket_number, unscheduled_high_priority, other
+
+1. UNASSIGNED ISSUES (category: "unassigned"): Find any issues where assignee_id is null, undefined, or empty.
    - Severity: warning
    - Evidence: List each issue by ID and title
    - Recommendation: "Assign an owner to prevent orphaned work"
 
-2. MISSING SPRINT ASSIGNMENT: Find active issues (not done/cancelled) that are not associated with any sprint. Cross-reference the issues list with sprint data — issues that appear in the issues list but not in any sprint's issue list are unscheduled.
+2. MISSING SPRINT ASSIGNMENT (category: "missing_sprint"): Find active issues (not done/cancelled) that are not associated with any sprint. Cross-reference the issues list with sprint data — issues that appear in the issues list but not in any sprint's issue list are unscheduled.
    - Severity: info (or warning if priority is "urgent" or "high")
    - Evidence: List each issue by ID, title, and priority
    - Recommendation: "Schedule in current or next sprint to ensure visibility"
 
-3. DUPLICATE ISSUES: Identify issues with identical or very similar titles (fuzzy match — same title with minor variations like case, punctuation, or prefixes).
+3. DUPLICATE ISSUES (category: "duplicate"): Identify issues with identical or very similar titles (fuzzy match — same title with minor variations like case, punctuation, or prefixes).
    - Severity: warning
    - Evidence: Group duplicate sets, listing all issue IDs and titles in each set
    - Recommendation: "Consolidate duplicates to avoid redundant effort"
 
-4. EMPTY ACTIVE SPRINTS: Check if any active sprint has zero issues assigned to it.
+4. EMPTY ACTIVE SPRINTS (category: "empty_sprint"): Check if any active sprint has zero issues assigned to it.
    - Severity: critical
    - Evidence: Sprint name/ID
    - Recommendation: "Either assign issues to this sprint or close it — empty sprints indicate process breakdown"
 
-5. MISSING TICKET NUMBERS: Check issue titles for ticket number conventions. Issues should have a recognizable prefix pattern (e.g., PROJ-123, #123, or similar). Only flag this if SOME issues follow the convention and others don't (inconsistency). If NO issues have ticket numbers, the project may not use that convention — do not flag.
+5. MISSING TICKET NUMBERS (category: "missing_ticket_number"): Check issue titles for ticket number conventions. Issues should have a recognizable prefix pattern (e.g., PROJ-123, #123, or similar). Only flag this if SOME issues follow the convention and others don't (inconsistency). If NO issues have ticket numbers, the project may not use that convention — do not flag.
    - Severity: info
    - Evidence: List issue titles that lack ticket number prefixes
    - Recommendation: "Add ticket number prefix for traceability and cross-referencing"
 
-6. UNOWNED SECURITY ISSUES: Find issues with security-related keywords in their title (security, vulnerability, CVE, auth, authentication, authorization, XSS, injection, CSRF) that have no assignee_id.
+6. UNOWNED SECURITY ISSUES (category: "security"): Find issues with security-related keywords in their title (security, vulnerability, CVE, auth, authentication, authorization, XSS, injection, CSRF) that have no assignee_id.
    - Severity: critical
    - Evidence: List issue IDs, titles, and the security keyword found
    - Recommendation: "Assign an owner immediately — unowned security work creates unacceptable risk"
 
-7. UNSCHEDULED HIGH-PRIORITY WORK: Find issues with priority "urgent" or "high" that are not assigned to any sprint.
+7. UNSCHEDULED HIGH-PRIORITY WORK (category: "unscheduled_high_priority"): Find issues with priority "urgent" or "high" that are not assigned to any sprint.
    - Severity: warning
    - Evidence: List issue IDs, titles, and priority levels
    - Recommendation: "Schedule in current or next sprint to prevent high-priority work from slipping"
@@ -299,13 +320,18 @@ ${userQuery}
 
 ${contextSection}${analysisMode}
 
+=== DETECTION CATEGORIES ===
+Each finding MUST include a "category" field from this exact list:
+  unassigned, missing_sprint, stale, duplicate, empty_sprint, security,
+  overloaded, blocked, missing_ticket_number, unscheduled_high_priority, other
+
 === SEVERITY MAPPINGS ===
-- Unstarted high-priority/urgent issues: warning
-- Unassigned issues in active sprint: warning
-- Workload concentration (>3 issues on one person): info
-- Stale in-progress work (no updates in >3 days): warning
-- Sprint off-track (completion rate insufficient for remaining time): critical
-- Blocked issues with no resolution path: critical
+- Unstarted high-priority/urgent issues (category: "unscheduled_high_priority"): warning
+- Unassigned issues in active sprint (category: "unassigned"): warning
+- Workload concentration >3 issues on one person (category: "overloaded"): info
+- Stale in-progress work, no updates in >3 days (category: "stale"): warning
+- Sprint off-track, completion rate insufficient for remaining time (category: "empty_sprint" or "other"): critical
+- Blocked issues with no resolution path (category: "blocked"): critical
 
 === PARTIAL DATA HANDLING ===
 IMPORTANT: Only analyze data categories that were successfully fetched.

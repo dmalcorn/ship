@@ -1,11 +1,29 @@
 import { Annotation, MessagesAnnotation } from "@langchain/langgraph";
 
 /**
+ * Detection categories — constrained enum the LLM must select from.
+ * Used in composite keys for stable dismiss/snooze deduplication.
+ */
+export type DetectionCategory =
+  | "unassigned"
+  | "missing_sprint"
+  | "stale"
+  | "duplicate"
+  | "empty_sprint"
+  | "security"
+  | "overloaded"
+  | "blocked"
+  | "missing_ticket_number"
+  | "unscheduled_high_priority"
+  | "other";
+
+/**
  * Finding produced by reasoning nodes.
  */
 export interface Finding {
   id: string;
   severity: "info" | "warning" | "critical";
+  category: DetectionCategory;
   title: string;
   description: string;
   evidence: string;

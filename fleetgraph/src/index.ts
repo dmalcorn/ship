@@ -1,11 +1,12 @@
 import express from "express";
 import cron from "node-cron";
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { Command } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
 import { buildProactiveGraph } from "./graph/proactive.js";
 import { buildOnDemandGraph } from "./graph/on-demand.js";
 import { isInterruptedResult, extractInterruptPayloadFromState } from "./utils/graph-helpers.js";
+import { shipApi } from "./utils/ship-api.js";
 
 // --- Environment validation ---
 const PORT = process.env.PORT || 3001;
@@ -44,6 +45,7 @@ interface StoredFinding {
   description: string;
   severity: "critical" | "warning" | "info";
   category: string;
+  detectionCategory: string;
   affectedDocumentId: string | null;
   affectedDocumentType: string | null;
   affectedDocumentTitle: string | null;
@@ -53,22 +55,20 @@ interface StoredFinding {
 }
 let storedFindings: StoredFinding[] = [];
 
-// --- Snoozed findings (findingId → expiry timestamp) ---
+// --- Snoozed findings (compositeKey → expiry timestamp) ---
+// Keyed by composite key (not finding ID) so snoozes survive finding regeneration across cron runs
 const snoozedFindings = new Map<string, number>();
 
 // --- Dismissed finding keys (persists across cron runs so dismissed findings don't reappear) ---
 // Uses a composite key of stable, data-derived fields instead of LLM-generated titles/IDs
 const dismissedKeys = new Set<string>();
 
-/** Build a dismiss key from stable fields. Single-document findings key on docType+docId+severity.
- *  Multi-document findings (no specific docId) fall back to including the title as a tiebreaker. */
-function buildDismissKey(f: { affectedDocumentId: string | null; affectedDocumentType: string | null; severity: string; title: string }): string {
-  const docId = f.affectedDocumentId || "none";
+/** Build a composite key from stable, data-derived fields.
+ *  Uses detectionCategory (constrained enum) instead of LLM-generated title for stability. */
+function buildCompositeKey(f: { affectedDocumentId: string | null; affectedDocumentType: string | null; severity: string; detectionCategory: string }): string {
   const docType = f.affectedDocumentType || "unknown";
-  if (!f.affectedDocumentId) {
-    return `${docType}|${docId}|${f.severity}|${f.title.toLowerCase().trim()}`;
-  }
-  return `${docType}|${docId}|${f.severity}`;
+  const docId = f.affectedDocumentId || "none";
+  return `${docType}|${docId}|${f.severity}|${f.detectionCategory}`;
 }
 
 /** Remove expired snoozes */
@@ -81,10 +81,36 @@ function pruneExpiredSnoozes(): void {
   }
 }
 
+// --- Change detection gate ---
+// Stores the SHA-256 hash of the last fetched data snapshot.
+// When the hash matches, the cron skips the graph (LLM call) entirely.
+let previousDataHash: string | null = null;
+
+/** Fetch a lightweight snapshot of all proactive data sources and return a stable hash. */
+async function fetchDataSnapshot(): Promise<{ hash: string }> {
+  const [issues, weeks, teamGrid, standupStatus] = await Promise.allSettled([
+    shipApi.getIssues(),
+    shipApi.getWeeks(),
+    shipApi.getTeamGrid(),
+    shipApi.getStandupStatus(),
+  ]);
+
+  // Use stringified results — fulfilled values or "rejected" markers
+  const snapshot = JSON.stringify([
+    issues.status === "fulfilled" ? issues.value : null,
+    weeks.status === "fulfilled" ? weeks.value : null,
+    teamGrid.status === "fulfilled" ? teamGrid.value : null,
+    standupStatus.status === "fulfilled" ? standupStatus.value : null,
+  ]);
+
+  const hash = createHash("sha256").update(snapshot).digest("hex");
+  return { hash };
+}
+
 /** Convert graph output to the StoredFinding shape the frontend expects. */
 function toStoredFindings(
   threadId: string,
-  findings: Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[]; affectedDocumentType?: string }>,
+  findings: Array<{ id: string; severity: string; category?: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[]; affectedDocumentType?: string }>,
   proposedActions: Array<{ findingId: string; description: string; requiresConfirmation: boolean }>,
 ): StoredFinding[] {
   const now = new Date().toISOString();
@@ -102,6 +128,7 @@ function toStoredFindings(
       description: f.description,
       severity: f.severity as StoredFinding["severity"],
       category: "proactive",
+      detectionCategory: f.category || "other",
       affectedDocumentId: docId,
       affectedDocumentType: f.affectedDocumentType || null,
       affectedDocumentTitle: null,
@@ -137,7 +164,7 @@ app.get("/health", (_req, res) => {
  */
 app.get("/api/fleetgraph/findings", (_req, res) => {
   pruneExpiredSnoozes();
-  const visibleFindings = storedFindings.filter((f) => !snoozedFindings.has(f.id));
+  const visibleFindings = storedFindings.filter((f) => !snoozedFindings.has(buildCompositeKey(f)));
   res.json({
     findings: visibleFindings,
     lastScanAt: lastRunTimestamp,
@@ -218,14 +245,19 @@ app.post("/api/fleetgraph/resume", async (req, res) => {
     }
 
     if (decision === "snooze") {
-      // Snooze hides the finding until the duration expires — it stays in the store
+      // Snooze hides the finding until the duration expires — it stays in the store.
+      // Keyed by composite key so snooze survives finding regeneration across cron runs.
       const duration = typeof snoozeDurationMs === "number" && snoozeDurationMs > 0
         ? snoozeDurationMs
         : 60 * 60 * 1000; // default 1 hour
       const expiry = Date.now() + duration;
       if (findingId) {
-        snoozedFindings.set(findingId, expiry);
-        console.log(`[resume] finding ${findingId} snoozed until ${new Date(expiry).toISOString()}`);
+        const finding = storedFindings.find((f) => f.id === findingId);
+        if (finding) {
+          const key = buildCompositeKey(finding);
+          snoozedFindings.set(key, expiry);
+          console.log(`[resume] finding ${findingId} (key: ${key}) snoozed until ${new Date(expiry).toISOString()}`);
+        }
       }
       res.json({
         threadId,
@@ -239,13 +271,14 @@ app.post("/api/fleetgraph/resume", async (req, res) => {
 
     // Confirm or dismiss: remove this finding from the store
     if (findingId) {
-      // Record the dismiss key so this finding doesn't reappear on the next cron run
+      // Record the composite key so this finding doesn't reappear on the next cron run
       const dismissed = storedFindings.find((f) => f.id === findingId);
       if (dismissed) {
-        dismissedKeys.add(buildDismissKey(dismissed));
+        const key = buildCompositeKey(dismissed);
+        dismissedKeys.add(key);
+        snoozedFindings.delete(key); // clear any snooze too
       }
       storedFindings = storedFindings.filter((f) => f.id !== findingId);
-      snoozedFindings.delete(findingId); // clear any snooze too
       console.log(`[resume] finding ${findingId} ${decision}ed — ${storedFindings.length} findings remaining`);
     } else {
       // Legacy: no findingId — cannot identify which finding was acted on, so do nothing.
@@ -351,6 +384,19 @@ cron.schedule(CRON_INTERVAL, async () => {
   lastRunTimestamp = now;
   console.log(`[cron] Proactive health check triggered at ${now}`);
   try {
+    // --- Change detection gate ---
+    // Fetch a lightweight snapshot and compare its hash to the previous run.
+    // If data is unchanged, skip the graph (and its LLM call) entirely.
+    // The existing findings store is left untouched — previous analysis is still valid.
+    const { hash: currentHash } = await fetchDataSnapshot();
+
+    if (previousDataHash !== null && currentHash === previousDataHash) {
+      console.log("[cron] data unchanged — skipping graph invocation");
+      return;
+    }
+    previousDataHash = currentHash;
+    console.log("[cron] data changed (or first run) — invoking proactive graph");
+
     const threadId = `proactive-${Date.now()}`;
     const config = { configurable: { thread_id: threadId } };
 
@@ -368,7 +414,7 @@ cron.schedule(CRON_INTERVAL, async () => {
       const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[]; affectedDocumentType?: string }>;
       const actions = (payload?.proposedActions ?? []) as Array<{ findingId: string; description: string; requiresConfirmation: boolean }>;
       const newFindings = toStoredFindings(threadId, findings, actions)
-        .filter((f) => !dismissedKeys.has(buildDismissKey(f)));
+        .filter((f) => !dismissedKeys.has(buildCompositeKey(f)));
       storedFindings = newFindings;
       console.log(
         `[cron] findings detected — paused at confirmation_gate (thread: ${threadId})`
