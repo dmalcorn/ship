@@ -1,10 +1,9 @@
 import { ChatAnthropic } from "@langchain/anthropic";
-import { HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import type { FleetGraphStateType, Finding } from "../state.js";
 
 const model = new ChatAnthropic({
-  model: "claude-sonnet-4-6",
+  model: "claude-opus-4-6",
   temperature: 0,
   maxTokens: 4096,
 });
@@ -260,37 +259,13 @@ ${(() => {
 - One finding per problem detected. Do not combine multiple problems.`;
 
   try {
-    const jsonPrompt = prompt + `\n\nRespond with ONLY a JSON object matching this exact schema (no markdown, no wrapping):
-{
-  "findings": [{ "id": "finding-1", "severity": "warning"|"info"|"critical", "category": "<detection_category>", "title": "...", "description": "...", "evidence": "...", "recommendation": "...", "affectedDocumentIds": ["uuid-1"], "affectedDocumentType": "issue" }],
-  "summary": "Overall health summary"
-}`;
+    console.log(`[analyze_health] invoking Opus with ${issuesSummary.length} issues, prompt ~${Math.round(prompt.length / 1000)}k chars`);
 
-    console.log(`[analyze_health] invoking LLM with ${issuesSummary.length} issues, prompt ~${Math.round(jsonPrompt.length / 1000)}k chars`);
-    // Prefill assistant response with "{" to force JSON output (must use LangChain message classes)
-    const response = await model.invoke([
-      new SystemMessage("You are a JSON API. You ONLY output valid JSON. No prose, no markdown, no explanation."),
-      new HumanMessage(jsonPrompt),
-      new AIMessage("{"),
-    ]);
+    const result = await model
+      .withStructuredOutput(AnalysisOutputSchema, { name: "project_health_analysis" })
+      .invoke(prompt);
 
-    // Extract text from response
-    let rawText: string;
-    if (typeof response.content === "string") {
-      rawText = response.content;
-    } else if (Array.isArray(response.content)) {
-      rawText = response.content.map((block: unknown) => {
-        const b = block as Record<string, unknown>;
-        return b.type === "text" ? (b.text as string) : "";
-      }).join("");
-    } else {
-      rawText = String(response.content);
-    }
-    // Prepend the "{" we used as assistant prefill
-    const text = "{" + rawText;
-    console.log(`[analyze_health] raw LLM response (first 300 chars): ${text.slice(0, 300)}`);
-
-    const { findings } = extractFindings(text, "analyze_health");
+    const findings: Finding[] = result.findings;
     const severity = determineSeverity(findings);
 
     console.log(
@@ -476,30 +451,11 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
 - Generate unique IDs for findings using format "finding-1", "finding-2", etc.`;
 
   try {
-    const jsonPrompt = prompt + `\n\nRespond with ONLY a JSON object matching this exact schema (no markdown, no wrapping):
-{
-  "findings": [{ "id": "finding-1", "severity": "warning"|"info"|"critical", "category": "<detection_category>", "title": "...", "description": "...", "evidence": "...", "recommendation": "...", "affectedDocumentIds": ["uuid-1"], "affectedDocumentType": "issue" }],
-  "summary": "Overall analysis summary answering the user's question"
-}`;
+    const result = await model
+      .withStructuredOutput(AnalysisOutputSchema, { name: "context_analysis" })
+      .invoke(prompt);
 
-    const response = await model.invoke([
-      new SystemMessage("You are a JSON API. You ONLY output valid JSON. No prose, no markdown, no explanation."),
-      new HumanMessage(jsonPrompt),
-      new AIMessage("{"),
-    ]);
-    let ctxRaw: string;
-    if (typeof response.content === "string") {
-      ctxRaw = response.content;
-    } else if (Array.isArray(response.content)) {
-      ctxRaw = response.content.map((block: unknown) => {
-        const b = block as Record<string, unknown>;
-        return b.type === "text" ? (b.text as string) : "";
-      }).join("");
-    } else {
-      ctxRaw = String(response.content);
-    }
-
-    const { findings } = extractFindings("{" + ctxRaw, "analyze_context");
+    const findings: Finding[] = result.findings;
     const severity = determineSeverity(findings);
 
     return { findings, severity, errors: [] };
