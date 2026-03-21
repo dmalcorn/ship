@@ -56,9 +56,20 @@ let storedFindings: StoredFinding[] = [];
 // --- Snoozed findings (findingId → expiry timestamp) ---
 const snoozedFindings = new Map<string, number>();
 
-// --- Dismissed finding titles (persists across cron runs so dismissed findings don't reappear) ---
-// Uses title instead of ID because the LLM generates new IDs each run
-const dismissedFindingTitles = new Set<string>();
+// --- Dismissed finding keys (persists across cron runs so dismissed findings don't reappear) ---
+// Uses a composite key of stable, data-derived fields instead of LLM-generated titles/IDs
+const dismissedKeys = new Set<string>();
+
+/** Build a dismiss key from stable fields. Single-document findings key on docType+docId+severity.
+ *  Multi-document findings (no specific docId) fall back to including the title as a tiebreaker. */
+function buildDismissKey(f: { affectedDocumentId: string | null; affectedDocumentType: string | null; severity: string; title: string }): string {
+  const docId = f.affectedDocumentId || "none";
+  const docType = f.affectedDocumentType || "unknown";
+  if (!f.affectedDocumentId) {
+    return `${docType}|${docId}|${f.severity}|${f.title.toLowerCase().trim()}`;
+  }
+  return `${docType}|${docId}|${f.severity}`;
+}
 
 /** Remove expired snoozes */
 function pruneExpiredSnoozes(): void {
@@ -228,10 +239,10 @@ app.post("/api/fleetgraph/resume", async (req, res) => {
 
     // Confirm or dismiss: remove this finding from the store
     if (findingId) {
-      // Record the title so this finding doesn't reappear on the next cron run
+      // Record the dismiss key so this finding doesn't reappear on the next cron run
       const dismissed = storedFindings.find((f) => f.id === findingId);
       if (dismissed) {
-        dismissedFindingTitles.add(dismissed.title);
+        dismissedKeys.add(buildDismissKey(dismissed));
       }
       storedFindings = storedFindings.filter((f) => f.id !== findingId);
       snoozedFindings.delete(findingId); // clear any snooze too
@@ -357,7 +368,7 @@ cron.schedule(CRON_INTERVAL, async () => {
       const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[]; affectedDocumentType?: string }>;
       const actions = (payload?.proposedActions ?? []) as Array<{ findingId: string; description: string; requiresConfirmation: boolean }>;
       const newFindings = toStoredFindings(threadId, findings, actions)
-        .filter((f) => !dismissedFindingTitles.has(f.title));
+        .filter((f) => !dismissedKeys.has(buildDismissKey(f)));
       storedFindings = newFindings;
       console.log(
         `[cron] findings detected — paused at confirmation_gate (thread: ${threadId})`
@@ -368,7 +379,7 @@ cron.schedule(CRON_INTERVAL, async () => {
       return;
     }
 
-    // Clean run — clear stale findings (but keep dismissed titles so they don't return)
+    // Clean run — clear stale findings (but keep dismissed keys so they don't return)
     storedFindings = [];
     console.log("[cron] clean run, no issues detected");
   } catch (err) {
