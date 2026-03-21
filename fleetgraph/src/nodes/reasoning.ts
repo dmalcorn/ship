@@ -193,16 +193,23 @@ ${(() => {
 - One finding per problem detected. Do not combine multiple problems.`;
 
   try {
-    console.log(`[analyze_health] invoking LLM with ${issuesSummary.length} issues, sprint=${!!state.sprintData}, team=${!!state.teamGrid}, standup=${!!state.standupStatus}, prompt ~${Math.round(prompt.length / 1000)}k chars`);
-    const result = await model
-      .withStructuredOutput(AnalysisOutputSchema, {
-        name: "project_health_analysis",
-      })
-      .invoke([{ role: "user", content: prompt }]);
+    const jsonPrompt = prompt + `\n\nRespond with ONLY a JSON object matching this exact schema (no markdown, no wrapping):
+{
+  "findings": [{ "id": "finding-1", "severity": "warning"|"info"|"critical", "category": "<detection_category>", "title": "...", "description": "...", "evidence": "...", "recommendation": "...", "affectedDocumentIds": ["uuid-1"], "affectedDocumentType": "issue" }],
+  "summary": "Overall health summary"
+}`;
 
-    console.log(`[analyze_health] raw LLM result: ${result.findings.length} findings, summary="${result.summary?.slice(0, 120)}..."`);
+    console.log(`[analyze_health] invoking LLM with ${issuesSummary.length} issues, prompt ~${Math.round(jsonPrompt.length / 1000)}k chars`);
+    const response = await model.invoke([{ role: "user", content: jsonPrompt }]);
+    const text = typeof response.content === "string" ? response.content : (response.content[0] as { text?: string })?.text ?? "";
+    console.log(`[analyze_health] raw LLM response (first 200 chars): ${text.slice(0, 200)}`);
 
-    const findings: Finding[] = result.findings;
+    // Extract JSON from response (handle markdown code blocks)
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
+    const jsonStr = (jsonMatch[1] ?? text).trim();
+    const parsed = AnalysisOutputSchema.parse(JSON.parse(jsonStr));
+
+    const findings: Finding[] = parsed.findings;
     const severity = determineSeverity(findings);
 
     console.log(
@@ -388,13 +395,19 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
 - Generate unique IDs for findings using format "finding-1", "finding-2", etc.`;
 
   try {
-    const result = await model
-      .withStructuredOutput(AnalysisOutputSchema, {
-        name: "context_analysis",
-      })
-      .invoke([{ role: "user", content: prompt }]);
+    const jsonPrompt = prompt + `\n\nRespond with ONLY a JSON object matching this exact schema (no markdown, no wrapping):
+{
+  "findings": [{ "id": "finding-1", "severity": "warning"|"info"|"critical", "category": "<detection_category>", "title": "...", "description": "...", "evidence": "...", "recommendation": "...", "affectedDocumentIds": ["uuid-1"], "affectedDocumentType": "issue" }],
+  "summary": "Overall analysis summary answering the user's question"
+}`;
 
-    const findings: Finding[] = result.findings;
+    const response = await model.invoke([{ role: "user", content: jsonPrompt }]);
+    const text = typeof response.content === "string" ? response.content : (response.content[0] as { text?: string })?.text ?? "";
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
+    const jsonStr = (jsonMatch[1] ?? text).trim();
+    const parsed = AnalysisOutputSchema.parse(JSON.parse(jsonStr));
+
+    const findings: Finding[] = parsed.findings;
     const severity = determineSeverity(findings);
 
     return { findings, severity, errors: [] };
