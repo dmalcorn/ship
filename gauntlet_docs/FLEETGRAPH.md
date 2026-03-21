@@ -52,7 +52,7 @@ FleetGraph **never** modifies Ship data on its own. This is a permanent architec
 - Bulk operations (archive, delete, restore)
 - Sprint scope changes (add/remove issues from sprint)
 
-The agent proposes actions with rationale; the human confirms or dismisses.
+The agent proposes actions with rationale; the human confirms, dismisses, or snoozes (1 hour, 4 hours, or next day). Dismissed findings are tracked by a composite key (document type + document ID + severity) to prevent reappearance across cron runs. Snoozed findings reappear after the snooze period expires.
 
 ### Who FleetGraph Notifies
 
@@ -135,11 +135,13 @@ graph TD
     FI --> AC[analyze_context]
     FS --> AC
     FT --> AC
+    AC -->|errors + no data| GD[graceful_degrade]
     AC -->|severity = clean| LCR[log_clean_run]
     AC -->|findings detected| PA[propose_actions]
-    LCR --> END1([END])
+    GD --> END1([END])
+    LCR --> END2([END])
     PA --> CG[confirmation_gate]
-    CG --> END2([END])
+    CG --> END3([END])
 ```
 
 ### Conditional Path Routing
@@ -148,9 +150,9 @@ After the reasoning node (`analyze_health` or `analyze_context`), the graph rout
 
 | Condition | Path | What Happens |
 |-----------|------|-------------|
-| **All fetches failed, no data available** | `graceful_degrade` -> END | Returns empty findings with clean severity. Prevents hallucinated findings from no data. (Proactive only) |
+| **All fetches failed, no data available** | `graceful_degrade` -> END | Returns empty findings with clean severity. Prevents hallucinated findings from no data. Both graphs include this path. |
 | **No quality gaps detected** | `log_clean_run` -> END | Logs a clean run. Project is healthy. Produces a visibly different LangSmith trace. |
-| **Findings detected** | `propose_actions` -> `confirmation_gate` -> END | Maps each finding to a proposed action. Uses LangGraph `interrupt()` to pause execution and surface actions for human review. |
+| **Findings detected** | `propose_actions` -> `confirmation_gate` -> END | Maps each finding to a proposed action. Uses LangGraph `interrupt()` to pause execution and surface actions for human review. Human can confirm, dismiss, or snooze. |
 
 These three paths produce visibly different LangSmith traces — a graded deliverable requirement.
 
@@ -331,9 +333,9 @@ Ship's API token system (`ship_<64 hex>`, Bearer auth, CSRF-exempt) is ideal for
 
 **Token budget controls:**
 - Issue filtering: only non-done/non-cancelled issues
-- Issue cap: 100 (proactive) / 50 (on-demand)
+- Issue cap: 50 (both proactive and on-demand)
 - Field selection: only `id`, `title`, `status`, `assignee_id`, `priority`, `updated_at`, `created_at`
-- Max output tokens: 4,096 per reasoning call
+- Max output tokens: 16,384 per reasoning call
 
 ---
 

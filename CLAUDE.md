@@ -191,4 +191,4 @@ Ship platform (api + web) deploys separately — see `.claude/CLAUDE.md` for Shi
 - **Real data only:** No mocks in production — all findings from live Ship data.
 - **Ship API is sole data source:** No direct database access.
 - **LangSmith traces are graded artifacts:** Every run must be traced. Different execution paths must be visible.
-- **Cost target:** ~$0.036/run with Sonnet. Token input bounded by filtering + capping issues at 100.
+- **Cost target:** ~$0.036/run with Sonnet. Token input bounded by filtering + capping issues at 50.
