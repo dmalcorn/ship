@@ -22,7 +22,7 @@ RUN pnpm --filter @ship/shared build
 RUN pnpm --filter @ship/fleetgraph build
 
 # Prune dev deps
-RUN CI=true pnpm prune --prod
+RUN CI=true pnpm prune --prod --ignore-scripts
 
 EXPOSE 3001
 ENV NODE_ENV=production

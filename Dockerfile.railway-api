@@ -29,7 +29,7 @@ RUN VITE_API_URL="" pnpm --filter @ship/web build
 RUN pnpm --filter @ship/api build
 
 # Prune dev deps
-RUN CI=true pnpm prune --prod
+RUN CI=true pnpm prune --prod --ignore-scripts
 
 EXPOSE 3000
 ENV NODE_ENV=production
