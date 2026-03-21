@@ -62,9 +62,10 @@ async function invokeWithTool(prompt: string, toolName: string, label: string): 
 
   if (toolCalls && toolCalls.length > 0) {
     const call = toolCalls[0]!;
-    console.log(`[${label}] tool call name="${call.name}", args keys: ${Object.keys(call.args ?? {})}`);
     const args = call.args as Record<string, unknown>;
-    if (Array.isArray(args.findings)) {
+    console.log(`[${label}] tool call name="${call.name}", args keys: ${Object.keys(args ?? {})}, findings count: ${Array.isArray(args?.findings) ? args.findings.length : 'missing'}`);
+    if (args?.summary) console.log(`[${label}] summary: ${String(args.summary).slice(0, 200)}`);
+    if (Array.isArray(args?.findings)) {
       return args.findings as Finding[];
     }
   }
@@ -75,8 +76,9 @@ async function invokeWithTool(prompt: string, toolName: string, label: string): 
       const b = block as Record<string, unknown>;
       if (b.type === "tool_use" && b.name === toolName) {
         const input = b.input as Record<string, unknown>;
-        console.log(`[${label}] found tool_use in content, input keys: ${Object.keys(input)}`);
-        if (Array.isArray(input.findings)) {
+        console.log(`[${label}] found tool_use in content, input keys: ${Object.keys(input)}, findings count: ${Array.isArray(input?.findings) ? input.findings.length : 'missing'}`);
+        if (input?.summary) console.log(`[${label}] content summary: ${String(input.summary).slice(0, 300)}`);
+        if (Array.isArray(input?.findings)) {
           return input.findings as Finding[];
         }
       }
