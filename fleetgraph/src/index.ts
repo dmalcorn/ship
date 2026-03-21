@@ -277,8 +277,24 @@ async function enrichFindingsWithPrograms(
       const pid = docToProgram.get(lookupId)!;
       f.programId = pid;
       f.programPrefix = programPrefixes.get(pid) ?? null;
+    } else {
+      console.log(`[enrichFindingsWithPrograms] no program for finding "${f.id}" (lookupId=${lookupId ?? "none"}, firstDoc=${findingToFirstDoc.get(f.id) ?? "none"})`);
     }
   }
+
+  // Fallback: if some findings have no program but others do, inherit the most common prefix
+  const resolvedPrefix = findings.find((f) => f.programPrefix)?.programPrefix ?? null;
+  const resolvedProgramId = findings.find((f) => f.programId)?.programId ?? null;
+  if (resolvedPrefix) {
+    for (const f of findings) {
+      if (!f.programPrefix) {
+        f.programId = resolvedProgramId;
+        f.programPrefix = resolvedPrefix;
+        console.log(`[enrichFindingsWithPrograms] inherited prefix "${resolvedPrefix}" for finding "${f.id}"`);
+      }
+    }
+  }
+
   console.log(`[enrichFindingsWithPrograms] resolved programs for ${docToProgram.size}/${docIds.length} documents, ${programPrefixes.size} prefixes`);
 }
 
