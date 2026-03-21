@@ -156,15 +156,16 @@ function buildAutomatedAction(
 
     case "missing_sprint":
     case "unscheduled_high_priority": {
-      // Unscheduled issues (whether flagged as missing_sprint or unscheduled_high_priority)
-      // can be assigned to the current active sprint
-      const sprintId = (sprintData as Record<string, unknown> | null)?.id as string | undefined;
-      if (docId && sprintId) {
+      // Unscheduled issues can be assigned to the current sprint.
+      // We don't pre-compute sprintId here because the issue's program determines
+      // which sprint it should go to. The apply-action endpoint resolves the correct
+      // sprint at execution time by looking up the issue's program association.
+      if (docId) {
         return {
           actionType: "assign_to_sprint",
           label: "This issue isn't in any sprint. It can be added to the current active sprint.",
           buttonLabel: "Add to Sprint",
-          payload: { issueId: docId, sprintId },
+          payload: { issueId: docId },
         };
       }
       return null;
@@ -431,10 +432,30 @@ app.post("/api/fleetgraph/apply-action", async (req, res) => {
       }
 
       case "assign_to_sprint": {
-        const { issueId, sprintId } = payload;
-        if (!issueId || !sprintId) { res.status(400).json({ error: "issueId and sprintId required" }); return; }
+        const { issueId } = payload;
+        if (!issueId) { res.status(400).json({ error: "issueId required" }); return; }
+
+        // Resolve the correct sprint by finding the issue's program, then matching
+        // to the current sprint for that program
+        const issueAssocs = await shipApi.getDocumentAssociations(issueId) as Array<{ related_id: string; relationship_type: string }>;
+        const programId = issueAssocs.find((a) => a.relationship_type === "program")?.related_id;
+        if (!programId) {
+          res.status(400).json({ error: "Issue has no program association — cannot determine sprint" });
+          return;
+        }
+
+        // Fetch all current sprints and find the one matching this program
+        const weeksData = await shipApi.getWeeks() as Record<string, unknown>;
+        const allSprints = (Array.isArray((weeksData).weeks) ? (weeksData).weeks : (Array.isArray(weeksData) ? weeksData : [])) as Array<Record<string, unknown>>;
+        const matchingSprint = allSprints.find((s) => s.program_id === programId);
+        if (!matchingSprint) {
+          res.status(400).json({ error: `No current sprint found for program ${programId}` });
+          return;
+        }
+
+        const sprintId = matchingSprint.id as string;
         await shipApi.addSprintAssociation(issueId, sprintId);
-        console.log(`[apply-action] assigned issue ${issueId} to sprint ${sprintId}`);
+        console.log(`[apply-action] assigned issue ${issueId} to sprint ${sprintId} (program ${programId})`);
         break;
       }
 

@@ -239,11 +239,11 @@ export async function fetchSprint(
       console.log("[fetch_sprint] no active sprint found");
     }
 
-    return { sprintData: activeSprint, errors: [] };
+    return { sprintData: activeSprint, allSprints: sprints as Record<string, unknown>[], errors: [] };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[fetch_sprint] failed: ${msg}`);
-    return { sprintData: null, errors: [`fetch_sprint: ${msg}`] };
+    return { sprintData: null, allSprints: [], errors: [`fetch_sprint: ${msg}`] };
   }
 }
 

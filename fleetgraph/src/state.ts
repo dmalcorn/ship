@@ -93,6 +93,10 @@ export const FleetGraphState = Annotation.Root({
     reducer: (_, next) => next,
     default: () => null,
   }),
+  allSprints: Annotation<Record<string, unknown>[]>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
   teamGrid: Annotation<Record<string, unknown> | null>({
     reducer: (_, next) => next,
     default: () => null,

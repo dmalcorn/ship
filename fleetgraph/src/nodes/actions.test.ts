@@ -29,6 +29,7 @@ function makeState(
     userId: null,
     issues: [],
     sprintData: null,
+    allSprints: [],
     teamGrid: null,
     standupStatus: null,
     findings: [],
