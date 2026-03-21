@@ -645,9 +645,11 @@ async function seed() {
       { title: 'Database connection pool exhaustion', state: 'todo', sprintOffset: null, priority: 'high', estimate: 6 },
 
       // --- FleetGraph one-click action targets ---
-      // Duplicate issues — same title in same program (triggers: duplicate detection → archive action)
-      { title: 'Implement burndown chart', state: 'todo', sprintOffset: 0, priority: 'medium', estimate: 6 },
-      { title: 'Add sprint velocity metrics', state: 'todo', sprintOffset: 1, priority: 'medium', estimate: 4 },
+      // Duplicate issues — near-identical titles in same program (triggers: duplicate detection → archive action)
+      // Titles differ slightly from originals above so seed dedup doesn't skip them,
+      // but the LLM fuzzy-match will flag them as duplicates.
+      { title: 'Implement burndown chart for sprints', state: 'todo', sprintOffset: 0, priority: 'medium', estimate: 6 },
+      { title: 'Add sprint velocity metrics dashboard', state: 'todo', sprintOffset: 1, priority: 'medium', estimate: 4 },
       // Issues without sprint assignment (triggers: missing_sprint → assign-to-sprint action)
       // Note: backlog items above (sprintOffset: null) already trigger this, but adding
       // explicitly high-priority ones that clearly should be in a sprint
