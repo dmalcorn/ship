@@ -94,6 +94,9 @@ export async function analyzeHealth(
   const issuesSummary = state.issues;
   const now = new Date().toISOString();
 
+  // Diagnostic: log data shapes so we can verify the LLM receives actionable data
+  console.log(`[analyze_health] data summary: ${issuesSummary.length} issues, sprint=${state.sprintData ? `"${(state.sprintData as Record<string, unknown>).title}"` : 'null'}, allSprints=${state.allSprints?.length ?? 0}, team=${!!state.teamGrid}, standup=${!!state.standupStatus}`);
+
   const prompt = `You are a project health analyst for a project management tool called Ship.
 Today's date: ${now}
 
@@ -158,8 +161,11 @@ Never infer or hallucinate findings about data you did not receive.
 ACTIVE ISSUES (${issuesSummary.length} total — already filtered to non-done/non-cancelled):
 ${JSON.stringify(issuesSummary)}
 
-SPRINT DATA:
+SPRINT DATA (primary/active sprint — includes sprintIssues array of assigned issues):
 ${state.sprintData ? JSON.stringify(state.sprintData) : "No active sprint data available"}
+
+ALL SPRINTS (${state.allSprints?.length ?? 0} total — use for empty sprint detection and cross-referencing issue membership):
+${state.allSprints && state.allSprints.length > 0 ? JSON.stringify(state.allSprints) : "No sprint list available"}
 
 TEAM DATA:
 ${state.teamGrid ? JSON.stringify(state.teamGrid) : "No team data available"}

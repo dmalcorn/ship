@@ -239,7 +239,24 @@ export async function fetchSprint(
       console.log("[fetch_sprint] no active sprint found");
     }
 
-    return { sprintData: activeSprint, allSprints: sprints as Record<string, unknown>[], errors: [] };
+    // Enrich all sprints with issue counts for empty-sprint detection
+    const enrichedSprints = await Promise.all(
+      (sprints as Record<string, unknown>[]).map(async (s) => {
+        if (s.id === activeSprint?.id && activeSprint?.sprintIssues) {
+          return s; // Already enriched above
+        }
+        try {
+          const issues = await shipApi.getSprintIssues(s.id as string);
+          const issueList = Array.isArray(issues) ? issues : [];
+          return { ...s, sprintIssues: issueList };
+        } catch {
+          return { ...s, sprintIssues: [] };
+        }
+      })
+    );
+    console.log(`[fetch_sprint] enriched ${enrichedSprints.length} sprints with issue counts`);
+
+    return { sprintData: activeSprint, allSprints: enrichedSprints, errors: [] };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[fetch_sprint] failed: ${msg}`);
