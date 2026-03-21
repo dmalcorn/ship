@@ -58,6 +58,7 @@ interface StoredFinding {
   severity: "critical" | "warning" | "info";
   category: string;
   detectionCategory: string;
+  programId: string | null;
   affectedDocumentId: string | null;
   affectedDocumentType: string | null;
   affectedDocumentTitle: string | null;
@@ -200,6 +201,7 @@ function toStoredFindings(
       severity: f.severity as StoredFinding["severity"],
       category: "proactive",
       detectionCategory,
+      programId: null, // enriched async by enrichFindingsWithPrograms()
       affectedDocumentId: docId,
       affectedDocumentType: f.affectedDocumentType || null,
       affectedDocumentTitle: null,
@@ -209,6 +211,40 @@ function toStoredFindings(
       createdAt: now,
     };
   });
+}
+
+/** Batch-resolve program IDs for findings by looking up associations for affected documents. */
+async function enrichFindingsWithPrograms(findings: StoredFinding[]): Promise<void> {
+  // Collect unique affected document IDs
+  const docIds = [...new Set(findings.map((f) => f.affectedDocumentId).filter(Boolean))] as string[];
+  if (docIds.length === 0) return;
+
+  // Batch lookup: fetch associations for each doc to find its program
+  const docToProgram = new Map<string, string>();
+  await Promise.allSettled(
+    docIds.map(async (docId) => {
+      try {
+        const assocs = (await shipApi.getDocumentAssociations(docId)) as Array<{
+          related_id: string;
+          relationship_type: string;
+        }>;
+        const programAssoc = assocs.find((a) => a.relationship_type === "program");
+        if (programAssoc) {
+          docToProgram.set(docId, programAssoc.related_id);
+        }
+      } catch {
+        // Skip — finding will have programId: null
+      }
+    }),
+  );
+
+  // Apply program IDs to findings
+  for (const f of findings) {
+    if (f.affectedDocumentId && docToProgram.has(f.affectedDocumentId)) {
+      f.programId = docToProgram.get(f.affectedDocumentId)!;
+    }
+  }
+  console.log(`[enrichFindingsWithPrograms] resolved programs for ${docToProgram.size}/${docIds.length} documents`);
 }
 
 // --- Build graphs ---
@@ -234,9 +270,13 @@ app.get("/health", (_req, res) => {
  * Findings endpoint — returns proactive findings stored in memory.
  * Polled by the Ship frontend every 30 seconds.
  */
-app.get("/api/fleetgraph/findings", (_req, res) => {
+app.get("/api/fleetgraph/findings", (req, res) => {
   pruneExpiredSnoozes();
-  const visibleFindings = storedFindings.filter((f) => !snoozedFindings.has(buildCompositeKey(f)));
+  const programId = req.query.programId as string | undefined;
+  let visibleFindings = storedFindings.filter((f) => !snoozedFindings.has(buildCompositeKey(f)));
+  if (programId) {
+    visibleFindings = visibleFindings.filter((f) => f.programId === programId);
+  }
   res.json({
     findings: visibleFindings,
     lastScanAt: lastRunTimestamp,
@@ -511,6 +551,7 @@ app.post("/api/fleetgraph/analyze", async (req, res) => {
       const actions = (payload?.proposedActions ?? []) as Array<{ findingId: string; description: string; requiresConfirmation: boolean }>;
       const sprintCtx = (result.sprintData ?? null) as Record<string, unknown> | null;
       storedFindings = toStoredFindings(threadId, findings, actions, sprintCtx);
+      await enrichFindingsWithPrograms(storedFindings);
       console.log(
         `[analyze] paused at confirmation_gate — thread ${threadId}`
       );
@@ -583,6 +624,7 @@ cron.schedule(CRON_INTERVAL, async () => {
       const sprintCtx = (result.sprintData ?? null) as Record<string, unknown> | null;
       const newFindings = toStoredFindings(threadId, findings, actions, sprintCtx)
         .filter((f) => !dismissedKeys.has(buildCompositeKey(f)));
+      await enrichFindingsWithPrograms(newFindings);
       storedFindings = newFindings;
       console.log(
         `[cron] findings detected — paused at confirmation_gate (thread: ${threadId})`

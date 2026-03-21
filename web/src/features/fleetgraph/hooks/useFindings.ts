@@ -4,21 +4,24 @@ import type { FindingsResponse } from '../types';
 
 export const fleetgraphKeys = {
   all: ['fleetgraph'] as const,
-  findings: () => [...fleetgraphKeys.all, 'findings'] as const,
+  findings: (programId?: string) => [...fleetgraphKeys.all, 'findings', programId ?? 'all'] as const,
 };
 
-async function fetchFindings(): Promise<FindingsResponse> {
-  const res = await apiGet('/api/fleetgraph/findings');
+async function fetchFindings(programId?: string): Promise<FindingsResponse> {
+  const url = programId
+    ? `/api/fleetgraph/findings?programId=${encodeURIComponent(programId)}`
+    : '/api/fleetgraph/findings';
+  const res = await apiGet(url);
   if (!res.ok) {
     throw new Error('Failed to fetch findings');
   }
   return res.json();
 }
 
-export function useFindings(enabled = true) {
+export function useFindings(enabled = true, programId?: string) {
   return useQuery({
-    queryKey: fleetgraphKeys.findings(),
-    queryFn: fetchFindings,
+    queryKey: fleetgraphKeys.findings(programId),
+    queryFn: () => fetchFindings(programId),
     staleTime: 0,
     refetchInterval: 30_000,
     enabled,

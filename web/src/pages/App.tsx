@@ -80,10 +80,6 @@ export function AppLayout() {
   const { data: standupStatus } = useStandupStatusQuery();
   const standupDue = standupStatus?.due ?? false;
 
-  // FleetGraph findings for badge count
-  // Disabled until Story 6.3 (backend proxy) is deployed — the route doesn't exist yet
-  const { data: findingsData } = useFindings();
-  const findingsCount = findingsData?.findings?.length ?? 0;
 
   // Check if user has pending action items (accountability tasks)
   const { data: actionItemsData } = useActionItemsQuery();
@@ -166,6 +162,25 @@ export function AppLayout() {
     if (issue) return issue.title;
     return undefined;
   }, [currentDocumentId, documents, issues]);
+
+  // Derive active program ID for FleetGraph scoping
+  const activeProgramId = useMemo(() => {
+    if (currentDocumentType === 'program' && currentDocumentId) return currentDocumentId;
+    if (currentDocumentType === 'issue' && currentDocumentId) {
+      const issue = issues.find(i => i.id === currentDocumentId);
+      const programAssoc = issue?.belongs_to?.find((a: { type: string }) => a.type === 'program');
+      if (programAssoc) return programAssoc.id;
+    }
+    if (currentDocumentType === 'project' && currentDocumentId) {
+      const project = projects.find(p => p.id === currentDocumentId);
+      if (project && 'program_id' in project) return (project as unknown as Record<string, unknown>).program_id as string;
+    }
+    return undefined;
+  }, [currentDocumentType, currentDocumentId, issues, projects]);
+
+  // FleetGraph findings for badge count — scoped to active program
+  const { data: findingsData } = useFindings(true, activeProgramId);
+  const findingsCount = findingsData?.findings?.length ?? 0;
 
   // Determine active mode from path or document type
   const getActiveMode = (): Mode => {
@@ -569,7 +584,7 @@ export function AppLayout() {
                 />
               )}
               {activeMode === 'fleetgraph' && (
-                <FindingsPanel />
+                <FindingsPanel programId={activeProgramId} />
               )}
             </div>
 

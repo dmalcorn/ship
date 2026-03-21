@@ -20,8 +20,12 @@ function formatRelativeTime(dateStr: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-export function FindingsPanel() {
-  const { data, isLoading, isError } = useFindings();
+interface FindingsPanelProps {
+  programId?: string;
+}
+
+export function FindingsPanel({ programId }: FindingsPanelProps) {
+  const { data, isLoading, isError } = useFindings(true, programId);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
   const handleDismissed = useCallback((id: string) => {

@@ -22,29 +22,24 @@ export function useApplyAction() {
   return useMutation({
     mutationFn: applyAction,
     onMutate: async (params) => {
-      // Cancel in-flight fetches so they don't overwrite our optimistic update
-      await queryClient.cancelQueries({ queryKey: fleetgraphKeys.findings() });
+      // Cancel all findings queries (any program scope)
+      const findingsPrefix = [...fleetgraphKeys.all, 'findings'];
+      await queryClient.cancelQueries({ queryKey: findingsPrefix });
 
-      const previous = queryClient.getQueryData<FindingsResponse>(fleetgraphKeys.findings());
+      // Optimistically remove the finding from all matching caches
+      queryClient.setQueriesData<FindingsResponse>(
+        { queryKey: findingsPrefix },
+        (old) => old ? { ...old, findings: old.findings.filter((f) => f.id !== params.findingId) } : old,
+      );
 
-      // Optimistically remove the finding (action resolves it)
-      if (previous) {
-        queryClient.setQueryData<FindingsResponse>(fleetgraphKeys.findings(), {
-          ...previous,
-          findings: previous.findings.filter((f) => f.id !== params.findingId),
-        });
-      }
-
-      return { previous };
+      return {};
     },
-    onError: (_err, _params, context) => {
-      // Roll back on failure
-      if (context?.previous) {
-        queryClient.setQueryData(fleetgraphKeys.findings(), context.previous);
-      }
+    onError: () => {
+      // Refetch on failure to restore correct state
+      queryClient.invalidateQueries({ queryKey: [...fleetgraphKeys.all, 'findings'] });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: fleetgraphKeys.findings() });
+      queryClient.invalidateQueries({ queryKey: [...fleetgraphKeys.all, 'findings'] });
     },
   });
 }
