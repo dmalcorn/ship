@@ -95,7 +95,8 @@ export async function analyzeHealth(
   const now = new Date().toISOString();
 
   // Diagnostic: log data shapes so we can verify the LLM receives actionable data
-  console.log(`[analyze_health] data summary: ${issuesSummary.length} issues, sprint=${state.sprintData ? `"${(state.sprintData as Record<string, unknown>).title}"` : 'null'}, allSprints=${state.allSprints?.length ?? 0}, team=${!!state.teamGrid}, standup=${!!state.standupStatus}`);
+  const sd = state.sprintData as Record<string, unknown> | null;
+  console.log(`[analyze_health] data summary: ${issuesSummary.length} issues, sprint=${sd ? `"${sd.name ?? sd.title}"(issues=${sd.issue_count})` : 'null'}, allSprints=${state.allSprints?.length ?? 0}, team=${!!state.teamGrid}, standup=${!!state.standupStatus}`);
 
   const prompt = `You are a project health analyst for a project management tool called Ship.
 Today's date: ${now}

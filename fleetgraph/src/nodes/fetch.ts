@@ -228,7 +228,7 @@ export async function fetchSprint(
         const issueList = Array.isArray(sprintIssues) ? sprintIssues : [];
         activeSprint.sprintIssues = issueList;
         console.log(
-          `[fetch_sprint] active sprint "${activeSprint.title}" found with ${issueList.length} assigned issues`
+          `[fetch_sprint] active sprint "${activeSprint.name ?? activeSprint.title}" found with ${issueList.length} assigned issues (issue_count=${activeSprint.issue_count})`
         );
       } catch (issueErr) {
         const issueMsg = issueErr instanceof Error ? issueErr.message : String(issueErr);
@@ -239,24 +239,11 @@ export async function fetchSprint(
       console.log("[fetch_sprint] no active sprint found");
     }
 
-    // Enrich all sprints with issue counts for empty-sprint detection
-    const enrichedSprints = await Promise.all(
-      (sprints as Record<string, unknown>[]).map(async (s) => {
-        if (s.id === activeSprint?.id && activeSprint?.sprintIssues) {
-          return s; // Already enriched above
-        }
-        try {
-          const issues = await shipApi.getSprintIssues(s.id as string);
-          const issueList = Array.isArray(issues) ? issues : [];
-          return { ...s, sprintIssues: issueList };
-        } catch {
-          return { ...s, sprintIssues: [] };
-        }
-      })
-    );
-    console.log(`[fetch_sprint] enriched ${enrichedSprints.length} sprints with issue counts`);
+    // allSprints already have issue_count from the API — no need to re-fetch
+    const allSprints = sprints as Record<string, unknown>[];
+    console.log(`[fetch_sprint] ${allSprints.length} sprints: ${allSprints.map(s => `${s.name ?? s.title}(${s.program_prefix ?? '?'}, issues=${s.issue_count})`).join(', ')}`);
 
-    return { sprintData: activeSprint, allSprints: enrichedSprints, errors: [] };
+    return { sprintData: activeSprint, allSprints, errors: [] };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[fetch_sprint] failed: ${msg}`);
