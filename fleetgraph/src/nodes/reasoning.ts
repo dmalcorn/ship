@@ -1,4 +1,5 @@
 import { ChatAnthropic } from "@langchain/anthropic";
+import { HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import type { FleetGraphStateType, Finding } from "../state.js";
 
@@ -7,6 +8,67 @@ const model = new ChatAnthropic({
   temperature: 0,
   maxTokens: 4096,
 });
+
+/**
+ * Invoke the model with a forced tool call, bypassing withStructuredOutput
+ * which returns {} on this LangChain version. Uses bindTools + tool_choice
+ * and manually extracts the tool call input.
+ */
+async function invokeWithTool(prompt: string, toolName: string, label: string): Promise<Finding[]> {
+  const toolSchema = {
+    name: toolName,
+    description: "Output structured project health findings",
+    schema: AnalysisOutputSchema,
+  };
+
+  const boundModel = model.bindTools([toolSchema], {
+    tool_choice: { type: "tool" as const, name: toolName },
+  });
+
+  const response = await boundModel.invoke([new HumanMessage(prompt)]);
+
+  // Extract tool call input from response
+  const toolCalls = response.tool_calls;
+  console.log(`[${label}] response has ${toolCalls?.length ?? 0} tool calls, content blocks: ${Array.isArray(response.content) ? response.content.length : 'string'}`);
+
+  if (toolCalls && toolCalls.length > 0) {
+    const call = toolCalls[0]!;
+    console.log(`[${label}] tool call name="${call.name}", args keys: ${Object.keys(call.args ?? {})}`);
+    const args = call.args as Record<string, unknown>;
+    if (Array.isArray(args.findings)) {
+      return args.findings as Finding[];
+    }
+  }
+
+  // Fallback: check content blocks for tool_use
+  if (Array.isArray(response.content)) {
+    for (const block of response.content) {
+      const b = block as Record<string, unknown>;
+      if (b.type === "tool_use" && b.name === toolName) {
+        const input = b.input as Record<string, unknown>;
+        console.log(`[${label}] found tool_use in content, input keys: ${Object.keys(input)}`);
+        if (Array.isArray(input.findings)) {
+          return input.findings as Finding[];
+        }
+      }
+    }
+  }
+
+  console.warn(`[${label}] no tool call findings found in response`);
+  // Last resort: try extractFindings on any text content
+  if (Array.isArray(response.content)) {
+    const textContent = response.content
+      .filter((b: unknown) => (b as Record<string, unknown>).type === "text")
+      .map((b: unknown) => (b as Record<string, unknown>).text as string)
+      .join("");
+    if (textContent.length > 0) {
+      console.log(`[${label}] trying text fallback (${textContent.length} chars)`);
+      return extractFindings(textContent, label).findings;
+    }
+  }
+
+  return [];
+}
 
 const DetectionCategorySchema = z.enum([
   "unassigned",
@@ -261,11 +323,7 @@ ${(() => {
   try {
     console.log(`[analyze_health] invoking Opus with ${issuesSummary.length} issues, prompt ~${Math.round(prompt.length / 1000)}k chars`);
 
-    const result = await model
-      .withStructuredOutput(AnalysisOutputSchema, { name: "project_health_analysis" })
-      .invoke(prompt);
-
-    const findings: Finding[] = result.findings;
+    const findings = await invokeWithTool(prompt, "project_health_analysis", "analyze_health");
     const severity = determineSeverity(findings);
 
     console.log(
@@ -451,11 +509,7 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
 - Generate unique IDs for findings using format "finding-1", "finding-2", etc.`;
 
   try {
-    const result = await model
-      .withStructuredOutput(AnalysisOutputSchema, { name: "context_analysis" })
-      .invoke(prompt);
-
-    const findings: Finding[] = result.findings;
+    const findings = await invokeWithTool(prompt, "context_analysis", "analyze_context");
     const severity = determineSeverity(findings);
 
     return { findings, severity, errors: [] };
