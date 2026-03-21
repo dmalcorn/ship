@@ -2,28 +2,27 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json pnpm-workspace.yaml tsconfig.json ./
-COPY fleetgraph/ ./fleetgraph/
-COPY shared/ ./shared/
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@10.27.0 --activate
 
-# Convert to npm workspaces (Railway doesn't have pnpm)
-RUN node -e " \
-  const p = JSON.parse(require('fs').readFileSync('package.json', 'utf8')); \
-  p.workspaces = ['shared', 'fleetgraph']; \
-  delete p.packageManager; \
-  require('fs').writeFileSync('package.json', JSON.stringify(p)); \
-"
+# Copy workspace config and package files first for layer caching
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.json ./
+COPY shared/package.json ./shared/
+COPY fleetgraph/package.json ./fleetgraph/
 
 # Install deps
-RUN npm install --workspaces --include=dev --ignore-scripts
+RUN pnpm install --frozen-lockfile
+
+# Copy source files
+COPY shared/ ./shared/
+COPY fleetgraph/ ./fleetgraph/
 
 # Build shared types, then fleetgraph
-RUN npm run build --workspace=shared
-RUN npm run build --workspace=fleetgraph
+RUN pnpm --filter @ship/shared build
+RUN pnpm --filter @ship/fleetgraph build
 
 # Prune dev deps
-RUN npm prune --workspaces --omit=dev
+RUN pnpm prune --prod
 
 EXPOSE 3001
 ENV NODE_ENV=production

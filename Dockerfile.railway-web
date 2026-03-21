@@ -2,30 +2,26 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Copy everything
-COPY package.json pnpm-workspace.yaml tsconfig.json ./
-COPY web/ ./web/
-COPY shared/ ./shared/
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@10.27.0 --activate
 
-# Add npm workspaces, remove pnpm packageManager field
-RUN node -e " \
-  const p = JSON.parse(require('fs').readFileSync('package.json', 'utf8')); \
-  p.workspaces = ['shared', 'web']; \
-  delete p.packageManager; \
-  require('fs').writeFileSync('package.json', JSON.stringify(p)); \
-"
-
-# Replace pnpm workspace:* protocol
-RUN sed -i 's/"workspace:\*"/"*"/g' web/package.json 2>/dev/null || true
+# Copy workspace config and package files first for layer caching
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.json ./
+COPY shared/package.json ./shared/
+COPY web/package.json ./web/
 
 # Install deps
-RUN npm install --workspaces --include=dev --ignore-scripts
+RUN pnpm install --frozen-lockfile
+
+# Copy source files
+COPY shared/ ./shared/
+COPY web/ ./web/
 
 # Build shared types, then web
 # VITE_API_URL is intentionally empty — nginx proxies /api and /collaboration
 # to the API service so all requests are same-origin (no cross-origin cookie issues)
-RUN npm run build --workspace=shared
-RUN VITE_API_URL="" npm run build --workspace=web
+RUN pnpm --filter @ship/shared build
+RUN VITE_API_URL="" pnpm --filter @ship/web build
 
 # Serve with nginx
 FROM nginx:alpine
