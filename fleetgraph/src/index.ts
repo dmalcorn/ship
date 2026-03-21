@@ -154,8 +154,10 @@ function buildAutomatedAction(
       }
       return null;
 
-    case "missing_sprint": {
-      // If there's exactly one active sprint, unscheduled issues can be assigned to it
+    case "missing_sprint":
+    case "unscheduled_high_priority": {
+      // Unscheduled issues (whether flagged as missing_sprint or unscheduled_high_priority)
+      // can be assigned to the current active sprint
       const sprintId = (sprintData as Record<string, unknown> | null)?.id as string | undefined;
       if (docId && sprintId) {
         return {

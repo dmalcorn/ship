@@ -116,13 +116,14 @@ IMPORTANT: Each finding MUST include a "category" field from this exact list:
    - Severity: info (or warning if priority is "urgent" or "high")
    - Evidence: List each issue by ID, title, and priority
    - Recommendation: "Schedule in current or next sprint to ensure visibility"
+   - IMPORTANT: Create ONE finding PER unscheduled issue (each with a single affectedDocumentIds entry) so each can be individually actioned
 
 3. DUPLICATE ISSUES (category: "duplicate"): Identify issues with identical or very similar titles (fuzzy match — same title with minor variations like case, punctuation, or prefixes).
    - Severity: warning
    - Evidence: Group duplicate sets, listing all issue IDs and titles in each set
    - Recommendation: "Consolidate duplicates to avoid redundant effort"
 
-4. EMPTY ACTIVE SPRINTS (category: "empty_sprint"): Check if any active sprint has zero issues assigned to it.
+4. EMPTY SPRINTS (category: "empty_sprint"): Check if any sprint (current or upcoming) has zero issues assigned to it.
    - Severity: critical
    - Evidence: Sprint name/ID
    - Recommendation: "Either assign issues to this sprint or close it — empty sprints indicate process breakdown"
@@ -141,6 +142,7 @@ IMPORTANT: Each finding MUST include a "category" field from this exact list:
    - Severity: warning
    - Evidence: List issue IDs, titles, and priority levels
    - Recommendation: "Schedule in current or next sprint to prevent high-priority work from slipping"
+   - IMPORTANT: Create ONE finding PER unscheduled issue (each with a single affectedDocumentIds entry) so each can be individually actioned
 
 === PARTIAL DATA HANDLING ===
 
