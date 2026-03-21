@@ -5,7 +5,7 @@ import type { FleetGraphStateType, Finding } from "../state.js";
 const model = new ChatAnthropic({
   model: "claude-sonnet-4-6",
   temperature: 0,
-  maxTokens: 16384,
+  maxTokens: 4096,
 });
 
 const DetectionCategorySchema = z.enum([
@@ -162,29 +162,28 @@ IMPORTANT: Each finding MUST include a "category" field from this exact list:
 
 === PARTIAL DATA HANDLING ===
 
-IMPORTANT: Only analyze data categories that were successfully fetched.
 - If the issues array is empty, do NOT produce any issue-related findings.
 - If sprint data is null/missing, do NOT produce sprint-related findings (categories 2, 4, 7).
-- If team data is null/missing, do NOT produce team-related findings.
-- If standup data is null/missing, do NOT produce standup-related findings.
-Never infer or hallucinate findings about data you did not receive.
+- Never infer or hallucinate findings about data you did not receive.
+- You MUST produce findings for every problem you detect. Do NOT skip issues just because there are many.
 
 === PROJECT DATA ===
 
 ACTIVE ISSUES (${issuesSummary.length} total — already filtered to non-done/non-cancelled):
-${JSON.stringify(issuesSummary)}
+${JSON.stringify(issuesSummary.map(i => ({ id: i.id, title: i.title, status: i.status, assignee_id: i.assignee_id || null, priority: i.priority || null })))}
 
-SPRINT DATA (primary/active sprint — includes sprintIssues array of assigned issues):
-${state.sprintData ? JSON.stringify(state.sprintData) : "No active sprint data available"}
+ALL SPRINTS (${allSprints.length} total):
+${allSprints.length > 0 ? JSON.stringify(allSprints.map(s => ({ id: s.id, name: s.name, program_prefix: s.program_prefix, issue_count: s.issue_count, completed_count: s.completed_count, started_count: s.started_count }))) : "No sprint list available"}
 
-ALL SPRINTS (${allSprints.length} total — use for empty sprint detection and cross-referencing issue membership):
-${allSprints.length > 0 ? JSON.stringify(allSprints.map(s => ({ id: s.id, name: s.name, program_prefix: s.program_prefix, program_name: s.program_name, issue_count: s.issue_count, completed_count: s.completed_count, started_count: s.started_count, status: s.status }))) : "No sprint list available"}
-
-TEAM DATA:
-${state.teamGrid ? JSON.stringify(state.teamGrid) : "No team data available"}
-
-STANDUP STATUS:
-${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data available"}
+SPRINT ISSUE MEMBERSHIP (which issues belong to which sprint):
+${(() => {
+  const membership: Record<string, string[]> = {};
+  const sprintIssues = (sd?.sprintIssues ?? []) as Array<Record<string, unknown>>;
+  if (sprintIssues.length > 0) {
+    membership[(sd?.name ?? sd?.id ?? "primary") as string] = sprintIssues.map(i => i.id as string);
+  }
+  return Object.keys(membership).length > 0 ? JSON.stringify(membership) : "Only primary sprint membership available — issues NOT in this list may be unscheduled";
+})()}
 
 === INSTRUCTIONS ===
 
