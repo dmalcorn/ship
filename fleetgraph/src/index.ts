@@ -59,6 +59,7 @@ interface StoredFinding {
   category: string;
   detectionCategory: string;
   programId: string | null;
+  programPrefix: string | null;
   affectedDocumentId: string | null;
   affectedDocumentType: string | null;
   affectedDocumentTitle: string | null;
@@ -202,6 +203,7 @@ function toStoredFindings(
       category: "proactive",
       detectionCategory,
       programId: null, // enriched async by enrichFindingsWithPrograms()
+      programPrefix: null,
       affectedDocumentId: docId,
       affectedDocumentType: f.affectedDocumentType || null,
       affectedDocumentTitle: null,
@@ -238,13 +240,29 @@ async function enrichFindingsWithPrograms(findings: StoredFinding[]): Promise<vo
     }),
   );
 
-  // Apply program IDs to findings
+  // Fetch program prefixes for each unique program ID
+  const uniqueProgramIds = [...new Set(docToProgram.values())];
+  const programPrefixes = new Map<string, string>();
+  await Promise.allSettled(
+    uniqueProgramIds.map(async (programId) => {
+      try {
+        const doc = (await shipApi.getDocument(programId)) as { properties?: { prefix?: string } };
+        if (doc?.properties?.prefix) {
+          programPrefixes.set(programId, doc.properties.prefix);
+        }
+      } catch { /* skip */ }
+    }),
+  );
+
+  // Apply program IDs and prefixes to findings
   for (const f of findings) {
     if (f.affectedDocumentId && docToProgram.has(f.affectedDocumentId)) {
-      f.programId = docToProgram.get(f.affectedDocumentId)!;
+      const pid = docToProgram.get(f.affectedDocumentId)!;
+      f.programId = pid;
+      f.programPrefix = programPrefixes.get(pid) ?? null;
     }
   }
-  console.log(`[enrichFindingsWithPrograms] resolved programs for ${docToProgram.size}/${docIds.length} documents`);
+  console.log(`[enrichFindingsWithPrograms] resolved programs for ${docToProgram.size}/${docIds.length} documents, ${programPrefixes.size} prefixes`);
 }
 
 // --- Build graphs ---

@@ -38,6 +38,7 @@ function makeFindingsData(count: number, lastScanAt?: string): { data: FindingsR
     description: `Description ${i}`,
     severity: severities[i % 3]!,
     category: 'test',
+    programPrefix: null,
     affectedDocumentId: null,
     affectedDocumentType: null,
     affectedDocumentTitle: null,

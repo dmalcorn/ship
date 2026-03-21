@@ -121,11 +121,16 @@ export function FindingCard({ finding, onDismissed }: FindingCardProps) {
         slidingOut ? 'translate-x-full opacity-0' : ''
       }`}
     >
-      {/* Severity + Title */}
+      {/* Severity + Program + Title */}
       <div className="flex items-start gap-2 mb-1">
         <span className={`text-xs font-medium uppercase shrink-0 ${SEVERITY_COLORS[finding.severity]}`}>
           {finding.severity}
         </span>
+        {finding.programPrefix && (
+          <span className="text-[10px] font-medium text-[#a3a3a3] bg-[#262626] px-1.5 py-0.5 rounded shrink-0 leading-none">
+            {finding.programPrefix}
+          </span>
+        )}
         <h3 className="text-xs font-medium text-[#f5f5f5] leading-tight m-0">
           {finding.title}
         </h3>

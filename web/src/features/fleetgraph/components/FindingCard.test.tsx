@@ -30,6 +30,7 @@ function createFinding(overrides: Partial<Finding> = {}): Finding {
     description: '3 issues have no assignee in the current sprint.',
     severity: 'warning',
     category: 'sprint-health',
+    programPrefix: null,
     affectedDocumentId: 'doc-123',
     affectedDocumentType: 'issue',
     affectedDocumentTitle: 'Sprint 5',

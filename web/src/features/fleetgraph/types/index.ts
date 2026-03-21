@@ -20,6 +20,7 @@ export interface Finding {
   description: string;
   severity: Severity;
   category: string;
+  programPrefix: string | null;
   affectedDocumentId: string | null;
   affectedDocumentType: string | null;
   affectedDocumentTitle: string | null;
