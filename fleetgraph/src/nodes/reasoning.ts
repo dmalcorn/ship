@@ -201,12 +201,35 @@ ${(() => {
 
     console.log(`[analyze_health] invoking LLM with ${issuesSummary.length} issues, prompt ~${Math.round(jsonPrompt.length / 1000)}k chars`);
     const response = await model.invoke([{ role: "user", content: jsonPrompt }]);
-    const text = typeof response.content === "string" ? response.content : (response.content[0] as { text?: string })?.text ?? "";
-    console.log(`[analyze_health] raw LLM response (first 200 chars): ${text.slice(0, 200)}`);
 
-    // Extract JSON from response (handle markdown code blocks)
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
-    const jsonStr = (jsonMatch[1] ?? text).trim();
+    // Extract text from response (may be string or array of content blocks)
+    let text: string;
+    if (typeof response.content === "string") {
+      text = response.content;
+    } else if (Array.isArray(response.content)) {
+      text = response.content.map((block: unknown) => {
+        const b = block as Record<string, unknown>;
+        return b.type === "text" ? (b.text as string) : "";
+      }).join("");
+    } else {
+      text = String(response.content);
+    }
+    console.log(`[analyze_health] raw LLM response (first 300 chars): ${text.slice(0, 300)}`);
+
+    // Extract JSON — strip markdown code fences if present
+    let jsonStr = text.trim();
+    const fenceMatch = jsonStr.match(/```(?:json)?\s*\r?\n([\s\S]*?)\r?\n\s*```/);
+    if (fenceMatch) {
+      jsonStr = fenceMatch[1]!;
+    } else if (jsonStr.startsWith("```")) {
+      // Fallback: just strip first and last lines
+      const lines = jsonStr.split("\n");
+      lines.shift(); // remove ```json
+      if (lines.length > 0 && lines[lines.length - 1]!.trim().startsWith("```")) lines.pop();
+      jsonStr = lines.join("\n");
+    }
+    jsonStr = jsonStr.trim();
+    console.log(`[analyze_health] extracted JSON (first 200 chars): ${jsonStr.slice(0, 200)}`);
     const parsed = AnalysisOutputSchema.parse(JSON.parse(jsonStr));
 
     const findings: Finding[] = parsed.findings;
@@ -402,10 +425,29 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
 }`;
 
     const response = await model.invoke([{ role: "user", content: jsonPrompt }]);
-    const text = typeof response.content === "string" ? response.content : (response.content[0] as { text?: string })?.text ?? "";
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
-    const jsonStr = (jsonMatch[1] ?? text).trim();
-    const parsed = AnalysisOutputSchema.parse(JSON.parse(jsonStr));
+    let ctxText: string;
+    if (typeof response.content === "string") {
+      ctxText = response.content;
+    } else if (Array.isArray(response.content)) {
+      ctxText = response.content.map((block: unknown) => {
+        const b = block as Record<string, unknown>;
+        return b.type === "text" ? (b.text as string) : "";
+      }).join("");
+    } else {
+      ctxText = String(response.content);
+    }
+    let ctxJson = ctxText.trim();
+    const ctxFence = ctxJson.match(/```(?:json)?\s*\r?\n([\s\S]*?)\r?\n\s*```/);
+    if (ctxFence) {
+      ctxJson = ctxFence[1]!;
+    } else if (ctxJson.startsWith("```")) {
+      const lines = ctxJson.split("\n");
+      lines.shift();
+      if (lines.length > 0 && lines[lines.length - 1]!.trim().startsWith("```")) lines.pop();
+      ctxJson = lines.join("\n");
+    }
+    ctxJson = ctxJson.trim();
+    const parsed = AnalysisOutputSchema.parse(JSON.parse(ctxJson));
 
     const findings: Finding[] = parsed.findings;
     const severity = determineSeverity(findings);
