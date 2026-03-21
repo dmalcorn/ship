@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useResumeAction } from '../hooks/useResumeAction';
+import { useApplyAction } from '../hooks/useApplyAction';
 import type { Finding, Severity } from '../types';
 
 const SEVERITY_COLORS: Record<Severity, string> = {
@@ -23,9 +24,11 @@ interface FindingCardProps {
 export function FindingCard({ finding, onDismissed }: FindingCardProps) {
   const navigate = useNavigate();
   const { mutate } = useResumeAction();
+  const { mutate: applyAction, isPending: isApplying } = useApplyAction();
   const [slidingOut, setSlidingOut] = useState(false);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [snoozedLabel, setSnoozedLabel] = useState<string | null>(null);
+  const [actionApplied, setActionApplied] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const snoozeRef = useRef<HTMLDivElement>(null);
 
@@ -96,6 +99,18 @@ export function FindingCard({ finding, onDismissed }: FindingCardProps) {
     setTimeout(() => setSlidingOut(true), 1500);
   }, [finding.threadId, finding.id, mutate]);
 
+  const handleApplyAction = useCallback(() => {
+    if (!finding.automatedAction) return;
+    setActionApplied(true);
+    applyAction({
+      findingId: finding.id,
+      actionType: finding.automatedAction.actionType,
+      payload: finding.automatedAction.payload,
+    });
+    // Brief feedback, then slide out
+    setTimeout(() => setSlidingOut(true), 1500);
+  }, [finding.id, finding.automatedAction, applyAction]);
+
   const recommendation = finding.proposedActions[0]?.label || finding.description;
 
   return (
@@ -121,8 +136,29 @@ export function FindingCard({ finding, onDismissed }: FindingCardProps) {
         {recommendation}
       </p>
 
-      {/* Snoozed feedback */}
-      {snoozedLabel ? (
+      {/* Automated action suggestion */}
+      {finding.automatedAction && !actionApplied && !snoozedLabel && (
+        <div className="mb-2 px-2 py-1.5 rounded bg-[#1a2332] border border-[#1e3a5f]">
+          <p className="text-xs text-[#93c5fd] leading-relaxed m-0 mb-1.5">
+            <span className="font-medium">Action:</span> {finding.automatedAction.label}
+          </p>
+          <button
+            onClick={handleApplyAction}
+            disabled={isApplying}
+            className="flex items-center gap-1 bg-[#1d4ed8] text-white text-xs px-2.5 py-1 rounded border-none cursor-pointer hover:bg-[#1e40af] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <BoltIcon />
+            {isApplying ? 'Applying…' : finding.automatedAction.buttonLabel}
+          </button>
+        </div>
+      )}
+
+      {/* Applied feedback */}
+      {actionApplied ? (
+        <span className="text-xs font-medium text-[#34d399]">
+          Action applied
+        </span>
+      ) : snoozedLabel ? (
         <span className="text-xs font-medium text-[#fbbf24]">
           Snoozed for {snoozedLabel}
         </span>
@@ -190,6 +226,14 @@ function ClockIcon() {
     <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="10" strokeWidth={2} />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2" />
+    </svg>
+  );
+}
+
+function BoltIcon() {
+  return (
+    <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
     </svg>
   );
 }

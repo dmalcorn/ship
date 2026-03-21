@@ -37,6 +37,18 @@ const CRON_INTERVAL = process.env.FLEETGRAPH_CRON_INTERVAL || "*/3 * * * *";
 let lastRunTimestamp: string | null = null;
 let proactiveRunning = false;
 
+// --- Automated action types for one-click fixes ---
+interface AutomatedAction {
+  /** Machine-readable action type for the apply-action endpoint */
+  actionType: "close_empty_sprint" | "archive_duplicate" | "assign_to_sprint";
+  /** Human-readable explanation shown on the finding card */
+  label: string;
+  /** Button text (short, fits a small button) */
+  buttonLabel: string;
+  /** IDs and context needed to execute the action */
+  payload: Record<string, string>;
+}
+
 // --- In-memory findings store (populated by proactive cron, served to frontend) ---
 interface StoredFinding {
   id: string;
@@ -51,6 +63,7 @@ interface StoredFinding {
   affectedDocumentTitle: string | null;
   affectedDocumentCount: number;
   proposedActions: Array<{ id: string; label: string; description: string }>;
+  automatedAction: AutomatedAction | null;
   createdAt: string;
 }
 let storedFindings: StoredFinding[] = [];
@@ -107,11 +120,65 @@ async function fetchDataSnapshot(): Promise<{ hash: string }> {
   return { hash };
 }
 
+/** Determine if a finding has an automatable fix and return the action descriptor. */
+function buildAutomatedAction(
+  category: string,
+  docIds: string[],
+  docType: string | undefined,
+  sprintData: Record<string, unknown> | null,
+): AutomatedAction | null {
+  const docId = docIds.length === 1 ? docIds[0] : undefined;
+
+  switch (category) {
+    case "empty_sprint":
+      // Empty sprint with 0 issues can be closed automatically
+      if (docId && docType === "sprint") {
+        return {
+          actionType: "close_empty_sprint",
+          label: "This sprint has no issues. It can be closed automatically since there's nothing to lose.",
+          buttonLabel: "Close Sprint",
+          payload: { sprintId: docId },
+        };
+      }
+      return null;
+
+    case "duplicate":
+      // If exactly 2 issues flagged, the newer one can be archived
+      if (docIds.length === 2) {
+        return {
+          actionType: "archive_duplicate",
+          label: "These issues appear to be duplicates. The second issue can be archived, keeping the original.",
+          buttonLabel: "Archive Duplicate",
+          payload: { keepId: docIds[0]!, archiveId: docIds[1]! },
+        };
+      }
+      return null;
+
+    case "missing_sprint": {
+      // If there's exactly one active sprint, unscheduled issues can be assigned to it
+      const sprintId = (sprintData as Record<string, unknown> | null)?.id as string | undefined;
+      if (docId && sprintId) {
+        return {
+          actionType: "assign_to_sprint",
+          label: "This issue isn't in any sprint. It can be added to the current active sprint.",
+          buttonLabel: "Add to Sprint",
+          payload: { issueId: docId, sprintId },
+        };
+      }
+      return null;
+    }
+
+    default:
+      return null;
+  }
+}
+
 /** Convert graph output to the StoredFinding shape the frontend expects. */
 function toStoredFindings(
   threadId: string,
   findings: Array<{ id: string; severity: string; category?: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[]; affectedDocumentType?: string }>,
   proposedActions: Array<{ findingId: string; description: string; requiresConfirmation: boolean }>,
+  sprintData?: Record<string, unknown> | null,
 ): StoredFinding[] {
   const now = new Date().toISOString();
   return findings.map((f) => {
@@ -121,6 +188,7 @@ function toStoredFindings(
     // Single affected document → link directly; multiple → navigate to list view
     const docIds = f.affectedDocumentIds || [];
     const docId = docIds.length === 1 ? (docIds[0] ?? null) : null;
+    const detectionCategory = f.category || "other";
     return {
       id: f.id,
       threadId,
@@ -128,12 +196,13 @@ function toStoredFindings(
       description: f.description,
       severity: f.severity as StoredFinding["severity"],
       category: "proactive",
-      detectionCategory: f.category || "other",
+      detectionCategory,
       affectedDocumentId: docId,
       affectedDocumentType: f.affectedDocumentType || null,
       affectedDocumentTitle: null,
       affectedDocumentCount: docIds.length,
       proposedActions: actions,
+      automatedAction: buildAutomatedAction(detectionCategory, docIds, f.affectedDocumentType, sprintData ?? null),
       createdAt: now,
     };
   });
@@ -322,6 +391,80 @@ app.post("/api/fleetgraph/resume", async (req, res) => {
 });
 
 /**
+ * Apply an automated action for a finding.
+ * The user clicked "Apply Fix" on a finding card — execute the pre-defined action.
+ */
+app.post("/api/fleetgraph/apply-action", async (req, res) => {
+  try {
+    const { findingId, actionType, payload } = req.body;
+
+    if (!findingId || !actionType || !payload) {
+      res.status(400).json({ error: "findingId, actionType, and payload are required" });
+      return;
+    }
+
+    const finding = storedFindings.find((f) => f.id === findingId);
+    if (!finding) {
+      res.status(404).json({ error: "Finding not found" });
+      return;
+    }
+
+    console.log(`[apply-action] executing ${actionType} for finding ${findingId}`);
+
+    switch (actionType) {
+      case "close_empty_sprint": {
+        const { sprintId } = payload;
+        if (!sprintId) { res.status(400).json({ error: "sprintId required" }); return; }
+        await shipApi.updateSprint(sprintId, { properties: { state: "cancelled" } });
+        console.log(`[apply-action] closed empty sprint ${sprintId}`);
+        break;
+      }
+
+      case "archive_duplicate": {
+        const { archiveId } = payload;
+        if (!archiveId) { res.status(400).json({ error: "archiveId required" }); return; }
+        await shipApi.deleteIssue(archiveId);
+        console.log(`[apply-action] archived duplicate issue ${archiveId}`);
+        break;
+      }
+
+      case "assign_to_sprint": {
+        const { issueId, sprintId } = payload;
+        if (!issueId || !sprintId) { res.status(400).json({ error: "issueId and sprintId required" }); return; }
+        await shipApi.addSprintAssociation(issueId, sprintId);
+        console.log(`[apply-action] assigned issue ${issueId} to sprint ${sprintId}`);
+        break;
+      }
+
+      default:
+        res.status(400).json({ error: `Unknown actionType: ${actionType}` });
+        return;
+    }
+
+    // Remove the finding from the store (action was taken — finding is resolved)
+    const key = buildCompositeKey(finding);
+    dismissedKeys.add(key);
+    snoozedFindings.delete(key);
+    storedFindings = storedFindings.filter((f) => f.id !== findingId);
+
+    // Invalidate the change detection cache so the next cron run re-analyzes
+    previousDataHash = null;
+
+    res.json({
+      status: "applied",
+      actionType,
+      findingId,
+      remainingFindings: storedFindings.length,
+    });
+  } catch (err) {
+    console.error("[apply-action] error:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Failed to apply action",
+    });
+  }
+});
+
+/**
  * Manual trigger for proactive analysis (useful for testing).
  * Returns interrupt payload when findings trigger confirmation gate.
  */
@@ -343,7 +486,8 @@ app.post("/api/fleetgraph/analyze", async (req, res) => {
       const payload = await extractInterruptPayloadFromState(proactiveGraph, config);
       const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[]; affectedDocumentType?: string }>;
       const actions = (payload?.proposedActions ?? []) as Array<{ findingId: string; description: string; requiresConfirmation: boolean }>;
-      storedFindings = toStoredFindings(threadId, findings, actions);
+      const sprintCtx = (result.sprintData ?? null) as Record<string, unknown> | null;
+      storedFindings = toStoredFindings(threadId, findings, actions, sprintCtx);
       console.log(
         `[analyze] paused at confirmation_gate — thread ${threadId}`
       );
@@ -413,7 +557,8 @@ cron.schedule(CRON_INTERVAL, async () => {
       const payload = await extractInterruptPayloadFromState(proactiveGraph, config);
       const findings = (payload?.findings ?? []) as Array<{ id: string; severity: string; title: string; description: string; evidence: string; recommendation: string; affectedDocumentIds?: string[]; affectedDocumentType?: string }>;
       const actions = (payload?.proposedActions ?? []) as Array<{ findingId: string; description: string; requiresConfirmation: boolean }>;
-      const newFindings = toStoredFindings(threadId, findings, actions)
+      const sprintCtx = (result.sprintData ?? null) as Record<string, unknown> | null;
+      const newFindings = toStoredFindings(threadId, findings, actions, sprintCtx)
         .filter((f) => !dismissedKeys.has(buildCompositeKey(f)));
       storedFindings = newFindings;
       console.log(

@@ -31,28 +31,40 @@ When invoked from Ship's UI on a specific document context:
 
 ### What FleetGraph Does Autonomously
 
-FleetGraph is **read-only + notify**. It can autonomously:
+FleetGraph autonomously:
 
-- Query all Ship API endpoints to gather data
-- Analyze patterns, trends, and relationships across documents
-- Generate structured findings with severity classification (critical, warning, info, clean)
-- Deliver findings to the agent findings panel
-- Log clean runs when no issues are detected
+- Queries all Ship API endpoints to gather data
+- Detects when data has changed via SHA-256 hash comparison (change detection gate), skipping the LLM when data is unchanged — reducing cost by 70-80%
+- Analyzes patterns, trends, and relationships across documents
+- Generates structured findings with severity classification (critical, warning, info, clean) and a detection category from a constrained enum
+- Delivers findings to the agent findings panel
+- Logs clean runs when no issues are detected
 
-FleetGraph **never** modifies Ship data on its own. This is a permanent architectural constraint driven by government platform context, not an MVP shortcut.
+### What FleetGraph Can Fix With One Click
 
-### What Requires Human Confirmation
+For findings where the correct action is unambiguous, FleetGraph suggests an automated fix on the finding card. The user sees an "Action:" explanation and a button to apply the fix instantly. The human is still in the loop — they choose whether to click the button or handle it manually.
 
-**All write actions** require explicit human approval via the confirmation gate:
+| Detection | Button | What It Does | Why It's Safe |
+|-----------|--------|-------------|---------------|
+| **Empty active sprint** | "Close Sprint" | Sets the sprint's state to cancelled | A sprint with zero issues is dead weight — nothing to lose |
+| **Duplicate issues** | "Archive Duplicate" | Soft-deletes the newer duplicate | Mechanical deduplication of identical titles — the original is preserved |
+| **Missing sprint assignment** | "Add to Sprint" | Creates a sprint association for the issue | When only one active sprint exists, there's no ambiguity about where it goes |
 
-- Issue state changes (move, close, cancel, reopen)
-- Assignment changes (reassign, unassign)
-- Priority or property updates
-- Creating new documents (issues, comments, standups)
-- Bulk operations (archive, delete, restore)
-- Sprint scope changes (add/remove issues from sprint)
+After an action is applied, the change detection cache is invalidated so the next cron run re-analyzes fresh data. The finding is removed from the store and added to the dismissed keys to prevent reappearance.
 
-The agent proposes actions with rationale; the human confirms, dismisses, or snoozes (1 hour, 4 hours, or next day). Dismissed findings are tracked by a composite key (document type + document ID + severity) to prevent reappearance across cron runs. Snoozed findings reappear after the snooze period expires.
+### What Requires Human Judgment
+
+These detections require human decision-making because the correct action depends on context the agent doesn't have:
+
+| Detection | Why Human Decides |
+|-----------|------------------|
+| **Unassigned issues** | The agent can't know *who* should own it — assignment requires expertise and team context |
+| **Unowned security issues** | Same as unassigned, but higher stakes — the agent escalates, the human picks the owner |
+| **Stale issues** | Could be blocked, deprioritized, or forgotten — the right response varies |
+| **Overloaded team members** | Rebalancing workload requires knowing team dynamics |
+| **Unscheduled high-priority work** | Scheduling depends on sprint capacity and priorities the agent can't assess |
+
+For these findings, the user can view the affected document(s), dismiss, or snooze (1 hour, 4 hours, or next day). Dismissed findings are tracked by a stable composite key (`documentType|documentId|severity|detectionCategory`) to prevent reappearance across cron runs. Snoozed findings use the same composite key so snoozes survive finding regeneration — if the data changes and the LLM produces a new finding for the same problem with a new ID, the snooze still applies.
 
 ### Who FleetGraph Notifies
 
@@ -189,9 +201,9 @@ FleetGraph uses `node-cron` to poll Ship's API every 3 minutes for proactive hea
 
 | Approach | Pros | Cons |
 |----------|------|------|
-| **Uniform polling** | Simple to implement | Wasteful API calls on inactive resources; doesn't scale |
+| **Uniform polling** | Simple to implement | Wasteful LLM calls on unchanged data; doesn't scale |
 | **Webhook-based** | Near-instant detection | Requires building webhook dispatch into Ship API (significant new work) |
-| **Adaptive polling (chosen)** | 60-70% fewer calls vs. uniform; meets latency target; works with existing API | More complex scheduling logic; slight detection delay on low-priority contexts |
+| **Polling with change detection (chosen)** | 70-80% fewer LLM calls vs. uniform; meets latency target; works with existing API; no Ship API changes required | Still fetches data every 3 minutes (cheap API calls); hash resets on deploy |
 | **Hybrid (poll + WebSocket)** | Lowest latency for active documents | WebSocket connection management complexity; Ship's WS is designed for document collaboration, not event streaming |
 
 ### Why 3-Minute Interval
@@ -208,19 +220,24 @@ This is well under the 5-minute target. The 5-second execution time breaks down 
 - ~1-2 seconds for parallel API fetches (4 concurrent calls via `fetchWithRetry`)
 - ~2-3 seconds for Claude reasoning (structured output generation)
 
+### Change Detection Gate (Implemented)
+
+Before each graph invocation, the cron handler fetches a lightweight snapshot of all four data sources (issues, sprints, team grid, standups), computes a SHA-256 hash, and compares it to the previous run's hash. If the hash matches, the graph is skipped entirely — no LLM call, no finding regeneration. The existing findings store is left untouched because the previous analysis is still valid.
+
+This is a **pre-graph gate**, not a graph node. The graph's three branches (clean, findings, errors) all assume the LLM has analyzed something. When data is unchanged, the correct behavior is "do nothing" — which doesn't map to any graph branch.
+
 ### Cost Implications
 
-At 3-minute intervals, the proactive graph runs:
+At 3-minute intervals with change detection:
 
-| Metric | Value |
-|--------|-------|
-| Runs per hour | 20 |
-| Runs per day | ~480 |
-| Cost per run | ~$0.036 (Claude Sonnet 4.6) |
-| **Daily cost** | **~$17** |
-| **Monthly cost** | **~$520** |
+| Metric | Without Change Detection | With Change Detection (80% skip) |
+|--------|-------------------------|----------------------------------|
+| API fetches per day | ~480 | ~480 (cheap, always run) |
+| LLM invocations per day | ~480 | ~96 |
+| Daily cost | ~$17 | ~$3.46 |
+| **Monthly cost** | **~$520** | **~$104** |
 
-At scale, rule-based pre-filtering (skip LLM when no changes detected since last poll) would reduce costs by 70-80%. See Cost Analysis section below.
+The skip rate depends on how frequently Ship data actually changes. For a team of 5-10 people during working hours, 80-90% of 3-minute windows have zero changes.
 
 ---
 
@@ -328,8 +345,9 @@ Ship's API token system (`ship_<64 hex>`, Bearer auth, CSRF-exempt) is ideal for
 **Chosen over:** Haiku (cheaper but less capable), Opus (smarter but more expensive)
 
 - Best cost/capability ratio at ~$0.036/run
-- `withStructuredOutput()` with Zod schema guarantees typed `Finding[]` output
+- `withStructuredOutput()` with Zod schema guarantees typed `Finding[]` output with constrained `DetectionCategory` enum (`unassigned`, `missing_sprint`, `stale`, `duplicate`, `empty_sprint`, `security`, `overloaded`, `blocked`, `missing_ticket_number`, `unscheduled_high_priority`, `other`)
 - Named tool binding (`project_health_analysis` / `context_analysis`) is more reliable than JSON-in-text parsing
+- Detection categories are data-derived (not free-text), enabling stable composite keys for dismiss/snooze deduplication across cron runs
 
 **Token budget controls:**
 - Issue filtering: only non-done/non-cancelled issues
@@ -380,19 +398,20 @@ Ship's API token system (`ship_<64 hex>`, Bearer auth, CSRF-exempt) is ideal for
 | 1,000 users | ~200 | ~96,000 | ~2,000 | ~98,000 | ~$105,840 |
 | 10,000 users | ~2,000 | ~960,000 | ~20,000 | ~980,000 | ~$1,058,400 |
 
-#### With Rule-Based Pre-Filtering (70-80% Skip LLM)
+#### With Change Detection Gate (Implemented — 70-80% Skip LLM)
 
-The primary cost optimization lever: a lightweight change-detection check before the reasoning node. If no issues have `updated_at` newer than the last poll, skip the LLM call entirely.
+The change detection gate hashes all fetched data with SHA-256 before each graph run. If the hash matches the previous run, the LLM call is skipped entirely. This is implemented and active in the current build.
 
-| Scale | Monthly Cost (Unoptimized) | Monthly Cost (Optimized) |
-|-------|---------------------------|-------------------------|
+| Scale | Monthly Cost (Without) | Monthly Cost (With Change Detection) |
+|-------|------------------------|--------------------------------------|
 | 100 users | ~$10,584 | ~$2,100 - $3,200 |
 | 1,000 users | ~$105,840 | ~$21,000 - $32,000 |
 | 10,000 users | ~$1,058,400 | ~$210,000 - $320,000 |
 
 ### Optimization Path
 
-1. **Rule-based pre-filtering (Phase 4):** Check `updated_at` timestamps before invoking LLM. Skip reasoning when no changes detected. Reduces LLM calls by 70-80%.
-2. **Adaptive polling intervals:** Reduce frequency for inactive projects (completed sprints, no recent updates). Currently all projects get 3-minute intervals.
-3. **Tiered LLM usage:** Use Haiku for simple threshold checks (stale >3 days), Sonnet only for complex reasoning (sprint health, dependency analysis).
-4. **Response caching:** Cache team grid (15-min TTL) and person documents (30-min TTL) to reduce API calls and input token counts.
+1. ~~**Change detection gate:**~~ ✅ **Implemented.** SHA-256 hash comparison of fetched data before invoking LLM. Skips reasoning when no changes detected. Reduces LLM calls by 70-80%.
+2. **Adaptive polling intervals (future):** Reduce frequency for inactive projects (completed sprints, no recent updates). Requires per-project scoping that the graph doesn't currently support.
+3. **Tiered LLM usage (future):** Use Haiku for simple threshold checks (stale >3 days), Sonnet only for complex reasoning (sprint health, dependency analysis).
+4. **Response caching (future):** Cache team grid (15-min TTL) and person documents (30-min TTL) to reduce API calls and input token counts.
+5. **Server-side `updated_at` filtering (future):** Add `?updated_after=<timestamp>` to Ship API endpoints so FleetGraph only fetches changed records, eliminating unnecessary data transfer.

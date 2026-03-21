@@ -38,6 +38,28 @@ export const fetchWithRetry = traceable(
 );
 
 /**
+ * Write to the Ship API (no retry — writes should not be retried blindly).
+ */
+async function shipWrite(method: string, path: string, body?: unknown): Promise<unknown> {
+  const url = `${SHIP_API_URL}${path}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `Bearer ${FLEETGRAPH_API_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!res.ok) {
+    throw new Error(`shipWrite ${method} ${path}: HTTP ${res.status} ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
+/**
  * Convenience wrappers for Ship API endpoints.
  */
 export const shipApi = {
@@ -68,4 +90,21 @@ export const shipApi = {
 
   getIssueHistory: (issueId: string) =>
     fetchWithRetry(`/api/issues/${issueId}/history`),
+
+  // --- Write operations (used by automated actions) ---
+
+  /** Soft-delete an issue (e.g., archive a duplicate) */
+  deleteIssue: (issueId: string) =>
+    shipWrite("DELETE", `/api/issues/${issueId}`),
+
+  /** Add a sprint association to an issue */
+  addSprintAssociation: (issueId: string, sprintId: string) =>
+    shipWrite("POST", `/api/documents/${issueId}/associations`, {
+      related_id: sprintId,
+      relationship_type: "sprint",
+    }),
+
+  /** Update a sprint's properties (e.g., close an empty sprint) */
+  updateSprint: (sprintId: string, updates: Record<string, unknown>) =>
+    shipWrite("PATCH", `/api/weeks/${sprintId}`, updates),
 };

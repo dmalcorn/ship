@@ -6,6 +6,13 @@ export interface ProposedAction {
   description: string;
 }
 
+export interface AutomatedAction {
+  actionType: string;
+  label: string;
+  buttonLabel: string;
+  payload: Record<string, string>;
+}
+
 export interface Finding {
   id: string;
   threadId: string;
@@ -18,6 +25,7 @@ export interface Finding {
   affectedDocumentTitle: string | null;
   affectedDocumentCount: number;
   proposedActions: ProposedAction[];
+  automatedAction: AutomatedAction | null;
   createdAt: string;
 }
 
