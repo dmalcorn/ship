@@ -6,7 +6,7 @@ import type { FleetGraphStateType, Finding } from "../state.js";
 const model = new ChatAnthropic({
   model: "claude-opus-4-6",
   temperature: 0,
-  maxTokens: 4096,
+  maxTokens: 8192,
 });
 
 /**
@@ -272,59 +272,41 @@ export async function analyzeHealth(
   const prompt = `You are a project health analyst for a project management tool called Ship.
 Today's date: ${now}
 
-Analyze the following project data and detect problems across ALL of the categories below.
-Generate a finding for EACH detected problem — do not group multiple problems into one finding.
+Analyze the following project data and detect problems. Create ONE finding per CATEGORY (not per issue).
+Each finding should list ALL affected issues in affectedDocumentIds.
 Use unique IDs: "finding-1", "finding-2", etc.
+MAXIMUM 10 findings total. Focus on the most critical problems.
 
 === DETECTION CATEGORIES ===
 
-IMPORTANT: Each finding MUST include a "category" field from this exact list:
-  unassigned, missing_sprint, stale, duplicate, empty_sprint, security,
-  overloaded, blocked, missing_ticket_number, unscheduled_high_priority, other
+Each finding MUST include a "category" field from this exact list:
+  unassigned, missing_sprint, duplicate, empty_sprint, security, unscheduled_high_priority, other
 
-1. UNASSIGNED ISSUES (category: "unassigned"): Find any issues where assignee_id is null, undefined, or empty.
-   - Severity: warning
-   - Evidence: List each issue by ID and title
-   - Recommendation: "Assign an owner to prevent orphaned work"
+1. UNASSIGNED ISSUES (category: "unassigned"): Issues where assignee_id is null.
+   - Severity: warning. ONE finding listing ALL unassigned issue IDs in affectedDocumentIds.
 
-2. MISSING SPRINT ASSIGNMENT (category: "missing_sprint"): Find active issues (not done/cancelled) that are not associated with any sprint. Cross-reference the issues list with sprint data — issues that appear in the issues list but not in any sprint's issue list are unscheduled.
-   - Severity: info (or warning if priority is "urgent" or "high")
-   - Evidence: List each issue by ID, title, and priority
-   - Recommendation: "Schedule in current or next sprint to ensure visibility"
-   - IMPORTANT: Create ONE finding PER unscheduled issue (each with a single affectedDocumentIds entry) so each can be individually actioned
+2. UNSCHEDULED HIGH-PRIORITY (category: "unscheduled_high_priority"): Issues with priority "urgent" or "high" not in any sprint.
+   - Severity: warning. ONE finding listing ALL affected issue IDs in affectedDocumentIds.
 
-3. DUPLICATE ISSUES (category: "duplicate"): Identify issues with identical or very similar titles (fuzzy match — same title with minor variations like case, punctuation, or prefixes).
-   - Severity: warning
-   - Evidence: Group duplicate sets, listing all issue IDs and titles in each set
-   - Recommendation: "Consolidate duplicates to avoid redundant effort"
+3. DUPLICATE ISSUES (category: "duplicate"): Issues with very similar titles.
+   - Severity: warning. One finding per duplicate group.
 
-4. EMPTY SPRINTS (category: "empty_sprint"): Check if any sprint (current or upcoming) has zero issues assigned to it.
-   - Severity: critical
-   - Evidence: Sprint name/ID
-   - Recommendation: "Either assign issues to this sprint or close it — empty sprints indicate process breakdown"
+4. EMPTY SPRINTS (category: "empty_sprint"): Sprints with issue_count of 0.
+   - Severity: critical. One finding per empty sprint.
 
-5. MISSING TICKET NUMBERS (category: "missing_ticket_number"): Check issue titles for ticket number conventions. Issues should have a recognizable prefix pattern (e.g., PROJ-123, #123, or similar). Only flag this if SOME issues follow the convention and others don't (inconsistency). If NO issues have ticket numbers, the project may not use that convention — do not flag.
-   - Severity: info
-   - Evidence: List issue titles that lack ticket number prefixes
-   - Recommendation: "Add ticket number prefix for traceability and cross-referencing"
+5. UNOWNED SECURITY ISSUES (category: "security"): Issues with security keywords (XSS, vulnerability, CVE, auth, injection, CSRF) AND no assignee_id.
+   - Severity: critical. ONE finding listing ALL affected issue IDs.
 
-6. UNOWNED SECURITY ISSUES (category: "security"): Find issues with security-related keywords in their title (security, vulnerability, CVE, auth, authentication, authorization, XSS, injection, CSRF) that have no assignee_id.
-   - Severity: critical
-   - Evidence: List issue IDs, titles, and the security keyword found
-   - Recommendation: "Assign an owner immediately — unowned security work creates unacceptable risk"
+6. MISSING SPRINT (category: "missing_sprint"): Active issues not in any sprint.
+   - Severity: info. ONE finding listing ALL affected issue IDs in affectedDocumentIds.
 
-7. UNSCHEDULED HIGH-PRIORITY WORK (category: "unscheduled_high_priority"): Find issues with priority "urgent" or "high" that are not assigned to any sprint.
-   - Severity: warning
-   - Evidence: List issue IDs, titles, and priority levels
-   - Recommendation: "Schedule in current or next sprint to prevent high-priority work from slipping"
-   - IMPORTANT: Create ONE finding PER unscheduled issue (each with a single affectedDocumentIds entry) so each can be individually actioned
+=== RULES ===
 
-=== PARTIAL DATA HANDLING ===
-
-- If the issues array is empty, do NOT produce any issue-related findings.
-- If sprint data is null/missing, do NOT produce sprint-related findings (categories 2, 4, 7).
-- Never infer or hallucinate findings about data you did not receive.
-- You MUST produce findings for every problem you detect. Do NOT skip issues just because there are many.
+- ALWAYS include the "findings" array in your response, even if empty.
+- Each finding must have: id, severity, category, title, description, evidence, recommendation, affectedDocumentIds, affectedDocumentType.
+- Keep evidence and description concise (under 200 chars each).
+- If the issues array is empty, return an empty findings array.
+- Only analyze data you actually received.
 
 === PROJECT DATA ===
 
