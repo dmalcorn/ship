@@ -1,4 +1,5 @@
 import { ChatAnthropic } from "@langchain/anthropic";
+import { HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import type { FleetGraphStateType, Finding } from "../state.js";
 
@@ -266,13 +267,14 @@ ${(() => {
 }`;
 
     console.log(`[analyze_health] invoking LLM with ${issuesSummary.length} issues, prompt ~${Math.round(jsonPrompt.length / 1000)}k chars`);
-    // Prefill assistant response with "{" to force JSON output
+    // Prefill assistant response with "{" to force JSON output (must use LangChain message classes)
     const response = await model.invoke([
-      { role: "user", content: jsonPrompt },
-      { role: "assistant", content: "{" },
+      new SystemMessage("You are a JSON API. You ONLY output valid JSON. No prose, no markdown, no explanation."),
+      new HumanMessage(jsonPrompt),
+      new AIMessage("{"),
     ]);
 
-    // Extract text from response (may be string or array of content blocks)
+    // Extract text from response
     let rawText: string;
     if (typeof response.content === "string") {
       rawText = response.content;
@@ -481,8 +483,9 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
 }`;
 
     const response = await model.invoke([
-      { role: "user", content: jsonPrompt },
-      { role: "assistant", content: "{" },
+      new SystemMessage("You are a JSON API. You ONLY output valid JSON. No prose, no markdown, no explanation."),
+      new HumanMessage(jsonPrompt),
+      new AIMessage("{"),
     ]);
     let ctxRaw: string;
     if (typeof response.content === "string") {
