@@ -2,6 +2,9 @@ import type { FleetGraphStateType } from "../state.js";
 import type { ContextDocument } from "../state.js";
 import { shipApi } from "../utils/ship-api.js";
 
+/** Max issues to fetch per run. Override with FLEETGRAPH_ISSUE_CAP env var. */
+const ISSUE_CAP = Math.max(1, parseInt(process.env.FLEETGRAPH_ISSUE_CAP || "50", 10)) || 50;
+
 /**
  * Extract essential fields from a raw issue object.
  *
@@ -129,7 +132,7 @@ export async function fetchIssues(
   state: FleetGraphStateType
 ): Promise<Partial<FleetGraphStateType>> {
   try {
-    const cap = state.triggerType === "on-demand" ? 50 : 50;
+    const cap = ISSUE_CAP;
 
     // On-demand with context: scope by document type
     if (state.triggerType === "on-demand" && state.contextDocument && state.documentId) {

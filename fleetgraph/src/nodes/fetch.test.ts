@@ -9,12 +9,14 @@ const mockGetStandupStatus = vi.fn();
 const mockGetDocument = vi.fn();
 const mockGetDocumentAssociations = vi.fn();
 const mockGetSprint = vi.fn();
+const mockGetWeeks = vi.fn();
 
 vi.mock("../utils/ship-api.js", () => ({
   shipApi: {
     getIssues: (...args: unknown[]) => mockGetIssues(...args),
     getSprint: (...args: unknown[]) => mockGetSprint(...args),
     getSprintIssues: (...args: unknown[]) => mockGetSprintIssues(...args),
+    getWeeks: () => mockGetWeeks(),
     getTeamGrid: () => mockGetTeamGrid(),
     getStandupStatus: () => mockGetStandupStatus(),
     getDocument: (...args: unknown[]) => mockGetDocument(...args),
@@ -99,7 +101,7 @@ describe("fetchIssues", () => {
     expect(issue).not.toHaveProperty("some_other_field");
   });
 
-  it("caps at 100 issues for proactive mode", async () => {
+  it("caps at FLEETGRAPH_ISSUE_CAP (default 50) issues for proactive mode", async () => {
     const issues = Array.from({ length: 150 }, (_, i) => ({
       id: `issue-${i}`,
       title: `Issue ${i}`,
@@ -111,7 +113,7 @@ describe("fetchIssues", () => {
 
     const result = await fetchIssues(makeState({ triggerType: "proactive" }));
 
-    expect(result.issues).toHaveLength(100);
+    expect(result.issues).toHaveLength(50);
   });
 
   it("caps at 50 issues for on-demand mode", async () => {
@@ -305,7 +307,7 @@ describe("fetchSprint", () => {
       { id: "issue-1", title: "Task A" },
       { id: "issue-2", title: "Task B" },
     ];
-    mockGetIssues.mockResolvedValueOnce([sprint]);
+    mockGetWeeks.mockResolvedValueOnce({ weeks: [sprint] });
     mockGetSprintIssues.mockResolvedValueOnce(sprintIssues);
 
     const result = await fetchSprint(makeState());
@@ -318,7 +320,7 @@ describe("fetchSprint", () => {
 
   it("returns sprint with empty issues when sprint issue fetch fails", async () => {
     const sprint = { id: "sprint-2", title: "Sprint 6" };
-    mockGetIssues.mockResolvedValueOnce([sprint]);
+    mockGetWeeks.mockResolvedValueOnce({ weeks: [sprint] });
     mockGetSprintIssues.mockRejectedValueOnce(new Error("HTTP 500"));
 
     const result = await fetchSprint(makeState());
@@ -329,7 +331,7 @@ describe("fetchSprint", () => {
   });
 
   it("returns null when no active sprints exist", async () => {
-    mockGetIssues.mockResolvedValueOnce([]);
+    mockGetWeeks.mockResolvedValueOnce({ weeks: [] });
 
     const result = await fetchSprint(makeState());
 
@@ -338,7 +340,7 @@ describe("fetchSprint", () => {
   });
 
   it("returns null and error when sprint fetch fails entirely", async () => {
-    mockGetIssues.mockRejectedValueOnce(new Error("HTTP 503"));
+    mockGetWeeks.mockRejectedValueOnce(new Error("HTTP 503"));
 
     const result = await fetchSprint(makeState());
 
@@ -401,7 +403,7 @@ describe("fetchSprint", () => {
 
   it("falls back to generic sprint fetch when on-demand but no contextDocument", async () => {
     const sprint = { id: "sprint-1", title: "Sprint 5" };
-    mockGetIssues.mockResolvedValueOnce([sprint]);
+    mockGetWeeks.mockResolvedValueOnce({ weeks: [sprint] });
     mockGetSprintIssues.mockResolvedValueOnce([]);
 
     const result = await fetchSprint(makeState({
@@ -411,7 +413,7 @@ describe("fetchSprint", () => {
       contextDocument: null,
     }));
 
-    expect(mockGetIssues).toHaveBeenCalledWith("document_type=sprint&status=active");
+    expect(mockGetWeeks).toHaveBeenCalled();
     expect(result.sprintData).toBeDefined();
   });
 
@@ -423,7 +425,7 @@ describe("fetchSprint", () => {
       ],
     };
     const sprint = { id: "sprint-1", title: "Sprint 5" };
-    mockGetIssues.mockResolvedValueOnce([sprint]);
+    mockGetWeeks.mockResolvedValueOnce({ weeks: [sprint] });
     mockGetSprintIssues.mockResolvedValueOnce([]);
 
     const result = await fetchSprint(makeState({
@@ -434,7 +436,7 @@ describe("fetchSprint", () => {
     }));
 
     // Falls back to generic because no sprint association found
-    expect(mockGetIssues).toHaveBeenCalledWith("document_type=sprint&status=active");
+    expect(mockGetWeeks).toHaveBeenCalled();
   });
 });
 

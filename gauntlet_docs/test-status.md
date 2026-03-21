@@ -1,18 +1,96 @@
 # Test Status
 
-Test count across the repository, grouped by category.
-
-| Category | Tests | Files | Passed | Failed |
-|----------|------:|------:|-------:|-------:|
-| API unit tests (`api/src/`) | 478 | 30 | 478 | 0 |
-| Web unit tests (`web/src/`) | 150 | 16 | 150 | 0 |
-| E2E tests (`e2e/`) | 872 | 67 | 860 | 6 |
-| FleetGraph tests (`fleetgraph/src/`) | 61 | 6 | 61 | 0 |
-| **Total** | **1,561** | **119** | **1,549** | **6** |
+Last updated: 2026-03-21
 
 ---
 
-## E2E Test Results
+## Overview
+
+| Category | Tests | Files | Passed | Failed | How to Run |
+|----------|------:|------:|-------:|-------:|------------|
+| API unit tests | 492 | 31 | 492 | 0 | `pnpm test` |
+| Web unit tests | 230 | 25 | 230 | 0 | `cd web && npx vitest run` |
+| FleetGraph tests | 92 | 6 | 92 | 0 | `cd fleetgraph && npx vitest run` |
+| E2E tests (all) | 880 | 72 | — | — | `pnpm test:e2e` |
+| **Total** | **1,694** | **134** | — | — | — |
+
+---
+
+## Running Unit Tests
+
+Unit tests are fast (seconds to a few minutes) and can be run freely.
+
+```bash
+pnpm test                              # API unit tests (vitest)
+cd web && npx vitest run               # Web unit tests (vitest)
+cd fleetgraph && npx vitest run        # FleetGraph tests (vitest)
+```
+
+All three suites require no special setup beyond a running PostgreSQL instance (API tests only).
+
+---
+
+## Running E2E Tests
+
+E2E tests use Playwright with per-worker isolation (each worker gets its own PostgreSQL container, API server, and Vite preview server). A full run takes **~1 hour** with 2 workers.
+
+### Running the Full Suite
+
+```bash
+pnpm test:e2e           # All 880 tests (chromium project)
+pnpm test:e2e:headed    # Same, but with visible browser
+pnpm test:e2e:ui        # Playwright UI mode (interactive)
+pnpm test:e2e:all       # All projects (runs every category project — use for matrix validation)
+```
+
+### Running by Category
+
+Tests are organized into 8 Playwright projects so you can run targeted subsets instead of the full suite. Use these when iterating on a specific area or when a full run is too slow.
+
+| Command | Project | Tests | Files | Runtime |
+|---------|---------|------:|------:|--------:|
+| `pnpm test:e2e:ui-tests` | ui | ~229 | 16 | TBD |
+| `pnpm test:e2e:data` | data | ~155 | 17 | TBD |
+| `pnpm test:e2e:security` | security | 110 | 5 | TBD |
+| `pnpm test:e2e:content` | content | 109 | 11 | TBD |
+| `pnpm test:e2e:integration` | integration | ~103 | 12 | TBD |
+| `pnpm test:e2e:a11y` | a11y | ~69 | 4 | TBD |
+| `pnpm test:e2e:api` | api | ~32 | 4 | TBD |
+| `pnpm test:e2e:perf` | perf | 15 | 1 | TBD |
+
+**Runtime column:** Update after running each category to build a time baseline. Runtime depends on worker count and host machine — record the worker count alongside.
+
+You can also combine multiple projects in a single run:
+
+```bash
+npx playwright test --project=api --project=security   # Run two categories together
+npx playwright test --project=content --project=perf    # Mix and match as needed
+```
+
+### What's in Each Category
+
+| Project | What it covers | Heaviest spec files |
+|---------|---------------|---------------------|
+| **ui** | Front-end interactions, navigation, drag-and-drop, admin views | bulk-selection (85), program-mode-week-ux (66) |
+| **content** | Editor features — mentions, tables, images, code blocks, backlinks | mentions (17), tables (14), file-attachments (14) |
+| **data** | CRUD, data persistence, document relationships, invites | workspaces (21), private-documents (20), programs (16) |
+| **security** | Auth, session timeout, RBAC, cross-workspace isolation | session-timeout (58), security (19), authorization (17) |
+| **a11y** | WCAG 2.2 AA, axe-core audits, ARIA, color contrast | accessibility-remediation (57), accessibility (11) |
+| **perf** | Load times, memory usage, typing latency | performance (15) |
+| **api** | REST endpoint validation (AI analysis, search, file upload, feedback) | request-changes-api (13), ai-analysis-api (11) |
+| **integration** | End-to-end workflows, race conditions, caching, FleetGraph | features-real (24), race-conditions (10), fleetgraph-use-cases (8) |
+
+### Tips
+
+- **Start small:** When debugging a failure, run just that category instead of the full suite.
+- **Worker count matters:** Set `PLAYWRIGHT_WORKERS=N` to control parallelism. More workers = faster but more RAM (~500MB each).
+- **Retries:** 1 retry locally, 2 in CI. Flaky tests often pass on retry.
+- **Single file:** You can always run a single spec directly: `npx playwright test e2e/auth.spec.ts`
+- **Debug files:** `debug-create.spec.ts` and `spike-isolated.spec.ts` are not in any category project — they only run via the default `chromium` project or by name.
+
+---
+
+## E2E Test Results (Last Full Run)
 
 **Date:** 2026-03-17
 **Workers:** 2
