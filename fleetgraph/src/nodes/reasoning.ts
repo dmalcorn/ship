@@ -177,8 +177,8 @@ ${JSON.stringify(issuesSummary)}
 SPRINT DATA (primary/active sprint — includes sprintIssues array of assigned issues):
 ${state.sprintData ? JSON.stringify(state.sprintData) : "No active sprint data available"}
 
-ALL SPRINTS (${state.allSprints?.length ?? 0} total — use for empty sprint detection and cross-referencing issue membership):
-${state.allSprints && state.allSprints.length > 0 ? JSON.stringify(state.allSprints) : "No sprint list available"}
+ALL SPRINTS (${allSprints.length} total — use for empty sprint detection and cross-referencing issue membership):
+${allSprints.length > 0 ? JSON.stringify(allSprints.map(s => ({ id: s.id, name: s.name, program_prefix: s.program_prefix, program_name: s.program_name, issue_count: s.issue_count, completed_count: s.completed_count, started_count: s.started_count, status: s.status }))) : "No sprint list available"}
 
 TEAM DATA:
 ${state.teamGrid ? JSON.stringify(state.teamGrid) : "No team data available"}
@@ -194,12 +194,14 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
 - One finding per problem detected. Do not combine multiple problems.`;
 
   try {
-    console.log(`[analyze_health] invoking LLM with ${issuesSummary.length} issues, sprint=${!!state.sprintData}, team=${!!state.teamGrid}, standup=${!!state.standupStatus}`);
+    console.log(`[analyze_health] invoking LLM with ${issuesSummary.length} issues, sprint=${!!state.sprintData}, team=${!!state.teamGrid}, standup=${!!state.standupStatus}, prompt ~${Math.round(prompt.length / 1000)}k chars`);
     const result = await model
       .withStructuredOutput(AnalysisOutputSchema, {
         name: "project_health_analysis",
       })
       .invoke([{ role: "user", content: prompt }]);
+
+    console.log(`[analyze_health] raw LLM result: ${result.findings.length} findings, summary="${result.summary?.slice(0, 120)}..."`);
 
     const findings: Finding[] = result.findings;
     const severity = determineSeverity(findings);
@@ -207,11 +209,14 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
     console.log(
       `[analyze_health] ${findings.length} findings, severity=${severity}`
     );
+    if (findings.length === 0) {
+      console.warn(`[analyze_health] WARNING: LLM returned 0 findings despite pre-check showing detectable issues`);
+    }
 
     return { findings, severity, errors: [] };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[analyze_health] LLM failed: ${msg}`);
+    console.error(`[analyze_health] LLM FAILED (returning clean): ${msg}`);
     return {
       findings: [],
       severity: "clean",
