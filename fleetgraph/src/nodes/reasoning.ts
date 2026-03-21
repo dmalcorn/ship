@@ -94,9 +94,21 @@ export async function analyzeHealth(
   const issuesSummary = state.issues;
   const now = new Date().toISOString();
 
-  // Diagnostic: log data shapes so we can verify the LLM receives actionable data
+  // Diagnostic: log data shapes and pre-check what SHOULD be detectable
   const sd = state.sprintData as Record<string, unknown> | null;
-  console.log(`[analyze_health] data summary: ${issuesSummary.length} issues, sprint=${sd ? `"${sd.name ?? sd.title}"(issues=${sd.issue_count})` : 'null'}, allSprints=${state.allSprints?.length ?? 0}, team=${!!state.teamGrid}, standup=${!!state.standupStatus}`);
+  const allSprints = (state.allSprints ?? []) as Record<string, unknown>[];
+  const unassigned = issuesSummary.filter((i) => !i.assignee_id);
+  const sprintIssueIds = new Set<string>();
+  for (const s of allSprints) {
+    const si = s.sprintIssues as Array<Record<string, unknown>> | undefined;
+    if (si) si.forEach((i) => sprintIssueIds.add(i.id as string));
+  }
+  const noSprint = issuesSummary.filter((i) => !sprintIssueIds.has(i.id as string));
+  const emptySprints = allSprints.filter((s) => (Number(s.issue_count) || 0) === 0);
+  console.log(`[analyze_health] data summary: ${issuesSummary.length} issues, sprint=${sd ? `"${sd.name ?? sd.title}"(issues=${sd.issue_count})` : 'null'}, allSprints=${allSprints.length}, team=${!!state.teamGrid}, standup=${!!state.standupStatus}`);
+  console.log(`[analyze_health] pre-check: ${unassigned.length} unassigned, ${noSprint.length} missing sprint, ${emptySprints.length} empty sprints`);
+  if (unassigned.length > 0) console.log(`[analyze_health] unassigned sample: ${unassigned.slice(0, 3).map(i => `"${i.title}"`).join(', ')}`);
+  if (noSprint.length > 0) console.log(`[analyze_health] no-sprint sample: ${noSprint.slice(0, 3).map(i => `"${i.title}" (priority=${i.priority})`).join(', ')}`);
 
   const prompt = `You are a project health analyst for a project management tool called Ship.
 Today's date: ${now}
