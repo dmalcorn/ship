@@ -65,6 +65,72 @@ export function determineSeverity(
 }
 
 /**
+ * Robustly extract findings from LLM text output.
+ * Handles: code fences, {findings:[...]}, bare arrays, single objects.
+ */
+function extractFindings(text: string, label: string): { findings: Finding[]; summary: string } {
+  // Strip markdown code fences
+  let jsonStr = text.trim();
+  const fenceMatch = jsonStr.match(/```(?:json)?\s*\r?\n?([\s\S]*?)\r?\n?\s*```/);
+  if (fenceMatch) {
+    jsonStr = fenceMatch[1]!.trim();
+  } else if (jsonStr.startsWith("```")) {
+    const lines = jsonStr.split("\n");
+    lines.shift();
+    if (lines.length > 0 && lines[lines.length - 1]!.trim().startsWith("```")) lines.pop();
+    jsonStr = lines.join("\n").trim();
+  }
+
+  console.log(`[${label}] extracted JSON (first 300 chars): ${jsonStr.slice(0, 300)}`);
+
+  // Try parsing as the expected schema first
+  try {
+    const obj = JSON.parse(jsonStr);
+    if (obj && Array.isArray(obj.findings)) {
+      const parsed = AnalysisOutputSchema.parse(obj);
+      return { findings: parsed.findings, summary: parsed.summary };
+    }
+    // Might be a bare array of findings
+    if (Array.isArray(obj)) {
+      const findings = obj.map((f: unknown) => FindingSchema.parse(f));
+      return { findings, summary: "" };
+    }
+    // Might be a single finding object
+    if (obj && typeof obj.id === "string" && typeof obj.severity === "string") {
+      return { findings: [FindingSchema.parse(obj)], summary: "" };
+    }
+  } catch (e) {
+    console.warn(`[${label}] direct JSON.parse failed: ${e instanceof Error ? e.message : e}`);
+  }
+
+  // Last resort: find the largest JSON object or array in the text
+  const jsonObjects = jsonStr.match(/\{[\s\S]*\}/g) || [];
+  for (const candidate of jsonObjects.sort((a, b) => b.length - a.length)) {
+    try {
+      const obj = JSON.parse(candidate);
+      if (obj && Array.isArray(obj.findings)) {
+        const parsed = AnalysisOutputSchema.parse(obj);
+        return { findings: parsed.findings, summary: parsed.summary };
+      }
+    } catch { /* try next */ }
+  }
+
+  const jsonArrays = jsonStr.match(/\[[\s\S]*\]/g) || [];
+  for (const candidate of jsonArrays.sort((a, b) => b.length - a.length)) {
+    try {
+      const arr = JSON.parse(candidate);
+      if (Array.isArray(arr) && arr.length > 0) {
+        const findings = arr.map((f: unknown) => FindingSchema.parse(f));
+        return { findings, summary: "" };
+      }
+    } catch { /* try next */ }
+  }
+
+  console.error(`[${label}] could not extract any findings from LLM response`);
+  return { findings: [], summary: "" };
+}
+
+/**
  * Analyze project health — LLM reasons about issues, sprint, team data.
  * Produces structured findings with severity levels across 7 detection categories.
  */
@@ -216,23 +282,7 @@ ${(() => {
     }
     console.log(`[analyze_health] raw LLM response (first 300 chars): ${text.slice(0, 300)}`);
 
-    // Extract JSON — strip markdown code fences if present
-    let jsonStr = text.trim();
-    const fenceMatch = jsonStr.match(/```(?:json)?\s*\r?\n([\s\S]*?)\r?\n\s*```/);
-    if (fenceMatch) {
-      jsonStr = fenceMatch[1]!;
-    } else if (jsonStr.startsWith("```")) {
-      // Fallback: just strip first and last lines
-      const lines = jsonStr.split("\n");
-      lines.shift(); // remove ```json
-      if (lines.length > 0 && lines[lines.length - 1]!.trim().startsWith("```")) lines.pop();
-      jsonStr = lines.join("\n");
-    }
-    jsonStr = jsonStr.trim();
-    console.log(`[analyze_health] extracted JSON (first 200 chars): ${jsonStr.slice(0, 200)}`);
-    const parsed = AnalysisOutputSchema.parse(JSON.parse(jsonStr));
-
-    const findings: Finding[] = parsed.findings;
+    const { findings, summary } = extractFindings(text, "analyze_health");
     const severity = determineSeverity(findings);
 
     console.log(
@@ -436,20 +486,8 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
     } else {
       ctxText = String(response.content);
     }
-    let ctxJson = ctxText.trim();
-    const ctxFence = ctxJson.match(/```(?:json)?\s*\r?\n([\s\S]*?)\r?\n\s*```/);
-    if (ctxFence) {
-      ctxJson = ctxFence[1]!;
-    } else if (ctxJson.startsWith("```")) {
-      const lines = ctxJson.split("\n");
-      lines.shift();
-      if (lines.length > 0 && lines[lines.length - 1]!.trim().startsWith("```")) lines.pop();
-      ctxJson = lines.join("\n");
-    }
-    ctxJson = ctxJson.trim();
-    const parsed = AnalysisOutputSchema.parse(JSON.parse(ctxJson));
 
-    const findings: Finding[] = parsed.findings;
+    const { findings } = extractFindings(ctxText, "analyze_context");
     const severity = determineSeverity(findings);
 
     return { findings, severity, errors: [] };
