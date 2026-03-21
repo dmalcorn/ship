@@ -599,8 +599,8 @@ app.post("/api/fleetgraph/analyze", async (req, res) => {
   }
 });
 
-// --- Proactive polling (configurable interval, default every 3 minutes) ---
-cron.schedule(CRON_INTERVAL, async () => {
+// --- Proactive health-check logic (shared by cron + startup) ---
+async function runProactiveHealthCheck(): Promise<void> {
   if (proactiveRunning) {
     console.log("[cron] skipping — previous run still in progress");
     return;
@@ -611,9 +611,6 @@ cron.schedule(CRON_INTERVAL, async () => {
   console.log(`[cron] Proactive health check triggered at ${now}`);
   try {
     // --- Change detection gate ---
-    // Fetch a lightweight snapshot and compare its hash to the previous run.
-    // If data is unchanged, skip the graph (and its LLM call) entirely.
-    // The existing findings store is left untouched — previous analysis is still valid.
     const { hash: currentHash } = await fetchDataSnapshot();
 
     if (previousDataHash !== null && currentHash === previousDataHash) {
@@ -643,8 +640,6 @@ cron.schedule(CRON_INTERVAL, async () => {
         .filter((f) => !dismissedKeys.has(buildCompositeKey(f)));
       await enrichFindingsWithPrograms(newFindings);
       storedFindings = newFindings;
-      // Only cache the hash when findings exist — this ensures re-analysis on next cron
-      // if the LLM flakes and returns "clean" on the same data.
       previousDataHash = currentHash;
       console.log(
         `[cron] findings detected — paused at confirmation_gate (thread: ${threadId})`
@@ -656,7 +651,6 @@ cron.schedule(CRON_INTERVAL, async () => {
     }
 
     // Clean run — don't cache hash so next cron re-analyzes the same data
-    // (LLM may have missed findings on this pass)
     storedFindings = [];
     console.log("[cron] clean run, no issues detected — will re-analyze next cycle");
   } catch (err) {
@@ -664,10 +658,21 @@ cron.schedule(CRON_INTERVAL, async () => {
   } finally {
     proactiveRunning = false;
   }
-});
+}
+
+// Schedule recurring cron
+cron.schedule(CRON_INTERVAL, runProactiveHealthCheck);
 
 // --- Start server ---
 app.listen(PORT, () => {
   console.log(`FleetGraph service running on port ${PORT}`);
   console.log(`Ship API: ${SHIP_API_URL || "http://localhost:3000"}`);
+
+  // Run first health check 10s after startup (gives Ship API time to be ready)
+  setTimeout(() => {
+    console.log("[startup] triggering initial proactive health check");
+    runProactiveHealthCheck().catch((err) =>
+      console.error("[startup] initial health check failed:", err)
+    );
+  }, 10_000);
 });
