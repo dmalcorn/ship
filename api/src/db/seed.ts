@@ -643,6 +643,16 @@ async function seed() {
       // High-priority unscheduled work (triggers: unscheduled high-priority warning)
       { title: 'Resolve authentication token expiry bug', state: 'todo', sprintOffset: null, priority: 'urgent', estimate: 4 },
       { title: 'Database connection pool exhaustion', state: 'todo', sprintOffset: null, priority: 'high', estimate: 6 },
+
+      // --- FleetGraph one-click action targets ---
+      // Duplicate issues — same title in same program (triggers: duplicate detection → archive action)
+      { title: 'Implement burndown chart', state: 'todo', sprintOffset: 0, priority: 'medium', estimate: 6 },
+      { title: 'Add sprint velocity metrics', state: 'todo', sprintOffset: 1, priority: 'medium', estimate: 4 },
+      // Issues without sprint assignment (triggers: missing_sprint → assign-to-sprint action)
+      // Note: backlog items above (sprintOffset: null) already trigger this, but adding
+      // explicitly high-priority ones that clearly should be in a sprint
+      { title: 'Critical performance regression in search', state: 'in_progress', sprintOffset: null, priority: 'urgent', estimate: 8 },
+      // Sprint +3 is already empty (no issues) — triggers: empty_sprint → close action
     ] as Array<{ title: string; state: string; sprintOffset: number | null; priority: string; estimate: number; unassigned?: boolean }>;
 
     // Generic issues for other programs - expanded for better testing
