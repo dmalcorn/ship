@@ -28,6 +28,8 @@ function extractIssueFields(issue: Record<string, unknown>): Record<string, unkn
     priority,
     updated_at: issue.updated_at,
     created_at: issue.created_at,
+    // Preserve belongs_to associations for enrichment node
+    belongs_to: issue.belongs_to ?? [],
   };
 }
 

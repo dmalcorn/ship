@@ -97,6 +97,7 @@ describe("fetchIssues", () => {
       priority: "high",
       updated_at: "2026-03-15",
       created_at: "2026-03-10",
+      belongs_to: [],
     });
     expect(issue).not.toHaveProperty("content");
     expect(issue).not.toHaveProperty("some_other_field");

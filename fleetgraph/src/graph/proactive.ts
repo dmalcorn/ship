@@ -3,6 +3,7 @@ import { MemorySaver } from "@langchain/langgraph-checkpoint";
 import { FleetGraphState } from "../state.js";
 import { resolveContext } from "../nodes/context.js";
 import { fetchIssues, fetchSprint, fetchTeam, fetchStandups } from "../nodes/fetch.js";
+import { enrichAssociations } from "../nodes/enrich.js";
 import { analyzeIssues, analyzeSprints, analyzeTeam, analyzeStandups, mergeFindings } from "../nodes/reasoning.js";
 import {
   proposeActions,
@@ -16,6 +17,7 @@ import {
  *
  * Flow:
  *   START -> resolve_context -> [fetch_issues, fetch_sprint, fetch_team, fetch_standups] (parallel)
+ *         -> enrich_associations (infer missing program/project/sprint from transitive lookups)
  *         -> [analyze_issues, analyze_sprints, analyze_team, analyze_standups] (parallel)
  *         -> merge_findings -> (clean? -> log_clean_run -> END)
  *                           -> (findings? -> propose_actions -> confirmation_gate -> END)
@@ -29,6 +31,7 @@ export function buildProactiveGraph() {
     .addNode("fetch_sprint", fetchSprint)
     .addNode("fetch_team", fetchTeam)
     .addNode("fetch_standups", fetchStandups)
+    .addNode("enrich_associations", enrichAssociations)
     .addNode("analyze_issues", analyzeIssues)
     .addNode("analyze_sprints", analyzeSprints)
     .addNode("analyze_team", analyzeTeam)
@@ -48,26 +51,17 @@ export function buildProactiveGraph() {
     .addEdge("resolve_context", "fetch_team")
     .addEdge("resolve_context", "fetch_standups")
 
-    // All fetches converge into parallel analyzers
-    .addEdge("fetch_issues", "analyze_issues")
-    .addEdge("fetch_sprint", "analyze_issues")
-    .addEdge("fetch_team", "analyze_issues")
-    .addEdge("fetch_standups", "analyze_issues")
+    // All fetches converge into enrichment node
+    .addEdge("fetch_issues", "enrich_associations")
+    .addEdge("fetch_sprint", "enrich_associations")
+    .addEdge("fetch_team", "enrich_associations")
+    .addEdge("fetch_standups", "enrich_associations")
 
-    .addEdge("fetch_issues", "analyze_sprints")
-    .addEdge("fetch_sprint", "analyze_sprints")
-    .addEdge("fetch_team", "analyze_sprints")
-    .addEdge("fetch_standups", "analyze_sprints")
-
-    .addEdge("fetch_issues", "analyze_team")
-    .addEdge("fetch_sprint", "analyze_team")
-    .addEdge("fetch_team", "analyze_team")
-    .addEdge("fetch_standups", "analyze_team")
-
-    .addEdge("fetch_issues", "analyze_standups")
-    .addEdge("fetch_sprint", "analyze_standups")
-    .addEdge("fetch_team", "analyze_standups")
-    .addEdge("fetch_standups", "analyze_standups")
+    // Enrichment fans out to parallel analyzers
+    .addEdge("enrich_associations", "analyze_issues")
+    .addEdge("enrich_associations", "analyze_sprints")
+    .addEdge("enrich_associations", "analyze_team")
+    .addEdge("enrich_associations", "analyze_standups")
 
     // All analyzers converge into merge
     .addEdge("analyze_issues", "merge_findings")
