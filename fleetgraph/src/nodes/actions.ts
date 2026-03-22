@@ -61,12 +61,22 @@ export async function confirmationGate(
 }
 
 /**
- * Log a clean proactive run (no findings).
+ * Log a clean proactive run (LLM analyzed and found no problems).
  */
 export async function logCleanRun(
   state: FleetGraphStateType
 ): Promise<Partial<FleetGraphStateType>> {
   console.log("[log_clean_run] No findings — project is healthy");
+  return {};
+}
+
+/**
+ * Log a skipped run (data unchanged since last analysis — no LLM call needed).
+ */
+export async function logSkippedRun(
+  state: FleetGraphStateType
+): Promise<Partial<FleetGraphStateType>> {
+  console.log("[log_skipped_run] Data unchanged — no new analysis needed");
   return {};
 }
 

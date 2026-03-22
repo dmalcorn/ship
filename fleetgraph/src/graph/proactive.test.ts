@@ -303,12 +303,13 @@ describe("proactive graph topology", () => {
     expect(result1.severity).toBe("clean");
     expect(mockInvoke).toHaveBeenCalledTimes(1);
 
-    // Second run: same data — LLM should NOT be called
+    // Second run: same data — LLM should NOT be called, routes to log_skipped_run
     const result2 = await graph.invoke(
       { triggerType: "proactive" as const, workspaceId: "test-ws" },
       { configurable: { thread_id: "test-cache-2" } }
     );
     expect(result2.severity).toBe("clean");
+    expect(result2.dataChanged).toBe(false);
     // Still only 1 LLM call total — second run was skipped by change detection
     expect(mockInvoke).toHaveBeenCalledTimes(1);
   });
