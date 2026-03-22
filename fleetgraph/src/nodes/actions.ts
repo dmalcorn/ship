@@ -73,10 +73,10 @@ export async function logCleanRun(
 /**
  * Log a skipped run (data unchanged since last analysis — no LLM call needed).
  */
-export async function logSkippedRun(
+export async function dataUnchanged(
   state: FleetGraphStateType
 ): Promise<Partial<FleetGraphStateType>> {
-  console.log("[log_skipped_run] Data unchanged — no new analysis needed");
+  console.log("[data_unchanged] Data unchanged — no new analysis needed");
   return {};
 }
 

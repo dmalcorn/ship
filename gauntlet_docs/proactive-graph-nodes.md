@@ -23,7 +23,7 @@ resolve_context
                      │         │
             unchanged│         │changed
                      ▼         ▼
-             log_skipped_run  analyze_health
+             data_unchanged  analyze_health
                      │         │
                      ▼      ┌──┴──────────┐
                     END     │             │
@@ -201,7 +201,7 @@ Terminal node for healthy runs. Logs "No findings — project is healthy." Reach
 
 ---
 
-### log_skipped_run
+### data_unchanged
 
 **Source:** `nodes/actions.ts`
 **API calls:** 0

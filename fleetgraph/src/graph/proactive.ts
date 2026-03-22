@@ -10,7 +10,7 @@ import {
   proposeActions,
   confirmationGate,
   logCleanRun,
-  logSkippedRun,
+  dataUnchanged,
   gracefulDegrade,
 } from "../nodes/actions.js";
 
@@ -20,7 +20,7 @@ import {
  * Flow:
  *   START -> resolve_context -> [fetch_issues, fetch_sprint, fetch_team, fetch_standups] (parallel)
  *         -> enrich_associations
- *         -> change_detection -> (unchanged? -> log_skipped_run -> END)
+ *         -> change_detection -> (unchanged? -> data_unchanged -> END)
  *                             -> (changed? -> analyze_health -> clean/findings/errors routing)
  *         -> analyze_health -> (clean? -> log_clean_run -> END)
  *                           -> (findings? -> propose_actions -> confirmation_gate -> END)
@@ -40,7 +40,7 @@ export function buildProactiveGraph() {
     .addNode("propose_actions", proposeActions)
     .addNode("confirmation_gate", confirmationGate)
     .addNode("log_clean_run", logCleanRun)
-    .addNode("log_skipped_run", logSkippedRun)
+    .addNode("data_unchanged", dataUnchanged)
     .addNode("graceful_degrade", gracefulDegrade)
 
     // Entry
@@ -63,7 +63,7 @@ export function buildProactiveGraph() {
 
     // Change detection: skip LLM if data unchanged
     .addConditionalEdges("change_detection", (state) => {
-      if (!state.dataChanged) return "log_skipped_run";
+      if (!state.dataChanged) return "data_unchanged";
       return "analyze_health";
     })
 
@@ -85,7 +85,7 @@ export function buildProactiveGraph() {
 
     // Terminal edges
     .addEdge("log_clean_run", END)
-    .addEdge("log_skipped_run", END)
+    .addEdge("data_unchanged", END)
     .addEdge("graceful_degrade", END)
     .addEdge("propose_actions", "confirmation_gate")
     .addEdge("confirmation_gate", END);
