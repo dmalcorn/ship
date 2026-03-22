@@ -663,8 +663,14 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Create issue error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    // Catch FK violation on belongs_to references (e.g. nonexistent document ID)
+    const pgErr = err as { code?: string; constraint?: string; detail?: string };
+    if (pgErr.code === '23503' && pgErr.constraint === 'document_associations_related_id_fkey') {
+      res.status(400).json({ error: 'Invalid belongs_to reference: one or more document IDs do not exist', detail: pgErr.detail });
+    } else {
+      console.error('Create issue error:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
   } finally {
     client.release();
   }
@@ -999,8 +1005,13 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
     res.json({ ...issue, display_id: displayId, belongs_to: belongsTo });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('Update issue error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    const pgErr = err as { code?: string; constraint?: string; detail?: string };
+    if (pgErr.code === '23503' && pgErr.constraint === 'document_associations_related_id_fkey') {
+      res.status(400).json({ error: 'Invalid belongs_to reference: one or more document IDs do not exist', detail: pgErr.detail });
+    } else {
+      console.error('Update issue error:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
   } finally {
     client.release();
   }
