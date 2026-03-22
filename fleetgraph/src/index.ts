@@ -34,9 +34,12 @@ console.log(
 // --- Configurable polling interval ---
 const CRON_INTERVAL = process.env.FLEETGRAPH_CRON_INTERVAL || "*/3 * * * *";
 
-// --- Track last proactive run timestamp ---
+// --- Track last proactive run timestamp and diagnostics ---
 let lastRunTimestamp: string | null = null;
 let proactiveRunning = false;
+let lastRunPath: string = "none";  // Which terminal node was hit
+let lastRunFindingsCount: number = 0;  // How many findings the LLM returned
+let lastRunErrors: string[] = [];  // Errors from the last run
 
 // --- Automated action types for one-click fixes ---
 interface AutomatedAction {
@@ -282,7 +285,7 @@ const onDemandGraph = buildOnDemandGraph();
 const app = express();
 app.use(express.json());
 
-// Health check
+// Health check with diagnostics
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -290,6 +293,12 @@ app.get("/health", (_req, res) => {
     tracing: process.env.LANGSMITH_TRACING === "true",
     uptime: process.uptime(),
     lastRunTimestamp,
+    lastRunPath,
+    lastRunFindingsCount,
+    lastRunErrors,
+    storedFindingsCount: storedFindings.length,
+    dismissedKeysCount: dismissedKeys.size,
+    snoozedCount: snoozedFindings.size,
   });
 });
 
@@ -630,6 +639,10 @@ async function runProactiveHealthCheck(): Promise<void> {
       config
     );
 
+    // Log raw result for diagnostics
+    lastRunErrors = result.errors ?? [];
+    console.log(`[cron] result: dataChanged=${result.dataChanged}, severity=${result.severity}, findings=${result.findings?.length ?? 0}, errors=${lastRunErrors.length}, interrupted=${isInterruptedResult(result)}`);
+
     // Check for non-throwing interrupt (MemorySaver pattern)
     if (isInterruptedResult(result)) {
       const payload = await extractInterruptPayloadFromState(proactiveGraph, config);
@@ -640,6 +653,8 @@ async function runProactiveHealthCheck(): Promise<void> {
         .filter((f) => !dismissedKeys.has(buildCompositeKey(f)));
       await enrichFindingsWithPrograms(newFindings, findings);
       storedFindings = newFindings;
+      lastRunPath = "confirmation_gate (findings)";
+      lastRunFindingsCount = findings.length;
       console.log(
         `[cron] findings detected — paused at confirmation_gate (thread: ${threadId})`
       );
@@ -654,16 +669,21 @@ async function runProactiveHealthCheck(): Promise<void> {
       if (storedFindings.length === 0) {
         // No findings to keep — force re-analysis next cycle so we don't get stuck
         invalidateDataHash();
+        lastRunPath = "data_unchanged (no findings — hash invalidated)";
         console.log("[cron] data unchanged but no findings stored — will re-analyze next cycle");
       } else {
+        lastRunPath = "data_unchanged (keeping findings)";
         console.log("[cron] data unchanged — keeping existing findings");
       }
+      lastRunFindingsCount = 0;
       return;
     }
 
     // Clean run (LLM ran but found nothing) — reset hash so next cron re-analyzes
     resetDataHash();
     storedFindings = [];
+    lastRunPath = "log_clean_run (LLM found nothing)";
+    lastRunFindingsCount = 0;
     console.log("[cron] clean run, no issues detected — will re-analyze next cycle");
   } catch (err) {
     console.error("[cron] proactive run failed:", err);
