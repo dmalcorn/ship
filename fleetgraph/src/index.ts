@@ -651,7 +651,13 @@ async function runProactiveHealthCheck(): Promise<void> {
 
     // Data unchanged — change_detection skipped the LLM. Keep existing findings.
     if (!result.dataChanged) {
-      console.log("[cron] data unchanged — keeping existing findings");
+      if (storedFindings.length === 0) {
+        // No findings to keep — force re-analysis next cycle so we don't get stuck
+        invalidateDataHash();
+        console.log("[cron] data unchanged but no findings stored — will re-analyze next cycle");
+      } else {
+        console.log("[cron] data unchanged — keeping existing findings");
+      }
       return;
     }
 
