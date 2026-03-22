@@ -4,7 +4,8 @@ import { FleetGraphState } from "../state.js";
 import { resolveContext } from "../nodes/context.js";
 import { fetchIssues, fetchSprint, fetchTeam, fetchStandups } from "../nodes/fetch.js";
 import { enrichAssociations } from "../nodes/enrich.js";
-import { analyzeIssues, analyzeSprints, analyzeTeam, analyzeStandups, mergeFindings } from "../nodes/reasoning.js";
+import { changeDetection } from "../nodes/change-detection.js";
+import { analyzeHealth } from "../nodes/reasoning.js";
 import {
   proposeActions,
   confirmationGate,
@@ -17,11 +18,12 @@ import {
  *
  * Flow:
  *   START -> resolve_context -> [fetch_issues, fetch_sprint, fetch_team, fetch_standups] (parallel)
- *         -> enrich_associations (infer missing program/project/sprint from transitive lookups)
- *         -> [analyze_issues, analyze_sprints, analyze_team, analyze_standups] (parallel)
- *         -> merge_findings -> (clean? -> log_clean_run -> END)
+ *         -> enrich_associations
+ *         -> change_detection -> (unchanged? -> log_clean_run -> END)
+ *                             -> (changed? -> analyze_health -> clean/findings/errors routing)
+ *         -> analyze_health -> (clean? -> log_clean_run -> END)
  *                           -> (findings? -> propose_actions -> confirmation_gate -> END)
- *         -> (errors? -> graceful_degrade -> END)
+ *                           -> (errors? -> graceful_degrade -> END)
  */
 export function buildProactiveGraph() {
   const graph = new StateGraph(FleetGraphState)
@@ -32,11 +34,8 @@ export function buildProactiveGraph() {
     .addNode("fetch_team", fetchTeam)
     .addNode("fetch_standups", fetchStandups)
     .addNode("enrich_associations", enrichAssociations)
-    .addNode("analyze_issues", analyzeIssues)
-    .addNode("analyze_sprints", analyzeSprints)
-    .addNode("analyze_team", analyzeTeam)
-    .addNode("analyze_standups", analyzeStandups)
-    .addNode("merge_findings", mergeFindings)
+    .addNode("change_detection", changeDetection)
+    .addNode("analyze_health", analyzeHealth)
     .addNode("propose_actions", proposeActions)
     .addNode("confirmation_gate", confirmationGate)
     .addNode("log_clean_run", logCleanRun)
@@ -51,26 +50,23 @@ export function buildProactiveGraph() {
     .addEdge("resolve_context", "fetch_team")
     .addEdge("resolve_context", "fetch_standups")
 
-    // All fetches converge into enrichment node
+    // All fetches converge into enrichment
     .addEdge("fetch_issues", "enrich_associations")
     .addEdge("fetch_sprint", "enrich_associations")
     .addEdge("fetch_team", "enrich_associations")
     .addEdge("fetch_standups", "enrich_associations")
 
-    // Enrichment fans out to parallel analyzers
-    .addEdge("enrich_associations", "analyze_issues")
-    .addEdge("enrich_associations", "analyze_sprints")
-    .addEdge("enrich_associations", "analyze_team")
-    .addEdge("enrich_associations", "analyze_standups")
+    // Enrichment → change detection gate
+    .addEdge("enrich_associations", "change_detection")
 
-    // All analyzers converge into merge
-    .addEdge("analyze_issues", "merge_findings")
-    .addEdge("analyze_sprints", "merge_findings")
-    .addEdge("analyze_team", "merge_findings")
-    .addEdge("analyze_standups", "merge_findings")
+    // Change detection: skip LLM if data unchanged
+    .addConditionalEdges("change_detection", (state) => {
+      if (!state.dataChanged) return "log_clean_run";
+      return "analyze_health";
+    })
 
-    // Conditional branching after merge
-    .addConditionalEdges("merge_findings", (state) => {
+    // After analysis: route by result
+    .addConditionalEdges("analyze_health", (state) => {
       // All data sources failed — degrade gracefully
       if (
         state.errors.length > 0 &&
@@ -81,9 +77,7 @@ export function buildProactiveGraph() {
       ) {
         return "graceful_degrade";
       }
-      if (state.severity === "clean") {
-        return "log_clean_run";
-      }
+      if (state.severity === "clean") return "log_clean_run";
       return "propose_actions";
     })
 

@@ -128,6 +128,12 @@ export const FleetGraphState = Annotation.Root({
     default: () => null,
   }),
 
+  // --- Change detection (set by change_detection node) ---
+  dataChanged: Annotation<boolean>({
+    reducer: (_, next) => next,
+    default: () => true,
+  }),
+
   // --- Error tracking (accumulates across nodes) ---
   errors: Annotation<string[]>({
     reducer: (prev, next) => [...prev, ...next],

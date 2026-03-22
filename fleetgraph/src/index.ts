@@ -1,12 +1,13 @@
 import express from "express";
 import cron from "node-cron";
-import { randomUUID, createHash } from "crypto";
+import { randomUUID } from "crypto";
 import { Command } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
 import { buildProactiveGraph } from "./graph/proactive.js";
 import { buildOnDemandGraph } from "./graph/on-demand.js";
 import { isInterruptedResult, extractInterruptPayloadFromState } from "./utils/graph-helpers.js";
 import { shipApi } from "./utils/ship-api.js";
+import { invalidateDataHash, resetDataHash } from "./nodes/change-detection.js";
 
 // --- Environment validation ---
 const PORT = process.env.PORT || 3001;
@@ -96,31 +97,6 @@ function pruneExpiredSnoozes(): void {
   }
 }
 
-// --- Change detection gate ---
-// Stores the SHA-256 hash of the last fetched data snapshot.
-// When the hash matches, the cron skips the graph (LLM call) entirely.
-let previousDataHash: string | null = null;
-
-/** Fetch a lightweight snapshot of all proactive data sources and return a stable hash. */
-async function fetchDataSnapshot(): Promise<{ hash: string }> {
-  const [issues, weeks, teamGrid, standupStatus] = await Promise.allSettled([
-    shipApi.getIssues(),
-    shipApi.getWeeks(),
-    shipApi.getTeamGrid(),
-    shipApi.getStandupStatus(),
-  ]);
-
-  // Use stringified results — fulfilled values or "rejected" markers
-  const snapshot = JSON.stringify([
-    issues.status === "fulfilled" ? issues.value : null,
-    weeks.status === "fulfilled" ? weeks.value : null,
-    teamGrid.status === "fulfilled" ? teamGrid.value : null,
-    standupStatus.status === "fulfilled" ? standupStatus.value : null,
-  ]);
-
-  const hash = createHash("sha256").update(snapshot).digest("hex");
-  return { hash };
-}
 
 /** Determine if a finding has an automatable fix and return the action descriptor. */
 function buildAutomatedAction(
@@ -562,7 +538,7 @@ app.post("/api/fleetgraph/apply-action", async (req, res) => {
     storedFindings = storedFindings.filter((f) => f.id !== findingId);
 
     // Invalidate the change detection cache so the next cron run re-analyzes
-    previousDataHash = null;
+    invalidateDataHash();
 
     res.json({
       status: "applied",
@@ -643,15 +619,6 @@ async function runProactiveHealthCheck(): Promise<void> {
   lastRunTimestamp = now;
   console.log(`[cron] Proactive health check triggered at ${now}`);
   try {
-    // --- Change detection gate ---
-    const { hash: currentHash } = await fetchDataSnapshot();
-
-    if (previousDataHash !== null && currentHash === previousDataHash) {
-      console.log("[cron] data unchanged — skipping graph invocation");
-      return;
-    }
-    console.log("[cron] data changed (or first run) — invoking proactive graph");
-
     const threadId = `proactive-${Date.now()}`;
     const config = { configurable: { thread_id: threadId } };
 
@@ -673,7 +640,6 @@ async function runProactiveHealthCheck(): Promise<void> {
         .filter((f) => !dismissedKeys.has(buildCompositeKey(f)));
       await enrichFindingsWithPrograms(newFindings, findings);
       storedFindings = newFindings;
-      previousDataHash = currentHash;
       console.log(
         `[cron] findings detected — paused at confirmation_gate (thread: ${threadId})`
       );
@@ -683,7 +649,8 @@ async function runProactiveHealthCheck(): Promise<void> {
       return;
     }
 
-    // Clean run — don't cache hash so next cron re-analyzes the same data
+    // Clean run — reset hash so next cron re-analyzes the same data
+    resetDataHash();
     storedFindings = [];
     console.log("[cron] clean run, no issues detected — will re-analyze next cycle");
   } catch (err) {

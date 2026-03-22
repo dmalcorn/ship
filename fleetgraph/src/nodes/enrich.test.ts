@@ -27,6 +27,7 @@ function makeState(issues: Record<string, unknown>[]): Parameters<typeof enrichA
     severity: "clean" as const,
     proposedActions: [],
     humanDecision: null,
+    dataChanged: true,
     errors: [],
     messages: [],
   };

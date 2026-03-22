@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { FleetGraphStateType, Finding } from "../state.js";
 
-// Mock ChatAnthropic — we now use model.invoke() with native tool format
+// Mock ChatAnthropic — we use model.invoke() with native tool format
 const mockInvoke = vi.fn();
 
 vi.mock("@langchain/anthropic", () => {
@@ -18,10 +18,7 @@ vi.mock("@langchain/anthropic", () => {
 // Import after mock setup
 const {
   determineSeverity,
-  analyzeIssues,
-  analyzeSprints,
-  analyzeTeam,
-  mergeFindings,
+  analyzeHealth,
   analyzeContext,
   buildAnalysisMode,
 } = await import("./reasoning.js");
@@ -46,6 +43,7 @@ function makeState(
     proposedActions: [],
     humanDecision: null,
     contextDocument: null,
+    dataChanged: true,
     errors: [],
     ...overrides,
   };
@@ -88,19 +86,26 @@ describe("determineSeverity", () => {
   });
 });
 
-describe("analyzeIssues", () => {
+describe("analyzeHealth", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("skips LLM when no issues", async () => {
-    const state = makeState({ issues: [] });
-    const result = await analyzeIssues(state);
+  it("skips LLM when no data available", async () => {
+    const state = makeState({
+      issues: [],
+      sprintData: null,
+      allSprints: [],
+      teamGrid: null,
+      standupStatus: null,
+    });
+    const result = await analyzeHealth(state);
     expect(result.findings).toEqual([]);
+    expect(result.severity).toBe("clean");
     expect(mockInvoke).not.toHaveBeenCalled();
   });
 
-  it("returns findings from LLM", async () => {
+  it("returns findings from LLM (single call)", async () => {
     const finding = {
-      id: "issue-1", severity: "warning", category: "unassigned",
+      id: "finding-1", severity: "warning", category: "unassigned",
       title: "Unassigned issues", description: "3 issues have no owner",
       evidence: "Fix login, Add tests, Update docs", recommendation: "Assign owners",
       affectedDocumentIds: ["a", "b", "c"], affectedDocumentType: "issue",
@@ -115,100 +120,55 @@ describe("analyzeIssues", () => {
       ],
     });
 
-    const result = await analyzeIssues(state);
+    const result = await analyzeHealth(state);
     expect(result.findings).toHaveLength(1);
     expect(result.findings?.[0]?.category).toBe("unassigned");
+    expect(result.severity).toBe("warning");
+    // Only 1 LLM call (not 4)
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
   });
 
-  it("returns empty findings on LLM failure", async () => {
-    mockInvoke.mockRejectedValueOnce(new Error("API error"));
-    const state = makeState({ issues: [{ id: "a", title: "Test", status: "todo" }] });
-    const result = await analyzeIssues(state);
-    expect(result.findings).toEqual([]);
-  });
-});
-
-describe("analyzeSprints", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("skips LLM when no sprint data", async () => {
-    const state = makeState({ sprintData: null, allSprints: [] });
-    const result = await analyzeSprints(state);
-    expect(result.findings).toEqual([]);
-    expect(mockInvoke).not.toHaveBeenCalled();
-  });
-
-  it("detects empty sprints", async () => {
-    const finding = {
-      id: "sprint-1", severity: "critical", category: "empty_sprint",
-      title: "Empty sprint", description: "Sprint has no issues",
-      evidence: "Sprint 5 has 0 issues", recommendation: "Populate or close",
-      affectedDocumentIds: ["s1"], affectedDocumentType: "sprint",
-    };
-    mockInvoke.mockResolvedValueOnce(mockToolCallResponse([finding]));
+  it("includes sprint data in prompt when available", async () => {
+    mockInvoke.mockResolvedValueOnce(mockToolCallResponse([]));
 
     const state = makeState({
+      issues: [{ id: "a", title: "Test", status: "todo" }],
       allSprints: [{ id: "s1", name: "Sprint 5", issue_count: 0 }],
       sprintData: { id: "s1", name: "Sprint 5", issue_count: 0, sprintIssues: [] },
     });
 
-    const result = await analyzeSprints(state);
-    expect(result.findings).toHaveLength(1);
-    expect(result.findings?.[0]?.category).toBe("empty_sprint");
-  });
-});
+    await analyzeHealth(state);
 
-describe("analyzeTeam", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("skips LLM when no issues", async () => {
-    const state = makeState({ issues: [] });
-    const result = await analyzeTeam(state);
-    expect(result.findings).toEqual([]);
-    expect(mockInvoke).not.toHaveBeenCalled();
+    const promptContent = (mockInvoke.mock.calls[0] as unknown[])[0] as Array<{ content: string }>;
+    expect(promptContent[0]!.content).toContain("Sprint 5");
+    expect(promptContent[0]!.content).toContain("EMPTY SPRINTS");
   });
 
-  it("detects overloaded team members", async () => {
-    const finding = {
-      id: "team-1", severity: "info", category: "overloaded",
-      title: "Overloaded assignee", description: "user-1 has 5 issues",
-      evidence: "5 active issues assigned", recommendation: "Redistribute work",
-      affectedDocumentIds: ["a", "b", "c", "d", "e"], affectedDocumentType: "issue",
-    };
-    mockInvoke.mockResolvedValueOnce(mockToolCallResponse([finding]));
+  it("includes workload and standup data in prompt", async () => {
+    mockInvoke.mockResolvedValueOnce(mockToolCallResponse([]));
 
     const state = makeState({
       issues: [
-        { id: "a", title: "T1", status: "todo", assignee_id: "user-1" },
-        { id: "b", title: "T2", status: "in_progress", assignee_id: "user-1" },
-        { id: "c", title: "T3", status: "in_progress", assignee_id: "user-1" },
-        { id: "d", title: "T4", status: "todo", assignee_id: "user-1" },
-        { id: "e", title: "T5", status: "todo", assignee_id: "user-1" },
+        { id: "a", title: "T1", status: "in_progress", assignee_id: "user-1" },
+        { id: "b", title: "T2", status: "todo", assignee_id: "user-1" },
       ],
+      standupStatus: { submitted: 2, total: 5 },
     });
 
-    const result = await analyzeTeam(state);
-    expect(result.findings).toHaveLength(1);
-    expect(result.findings?.[0]?.category).toBe("overloaded");
-  });
-});
+    await analyzeHealth(state);
 
-describe("mergeFindings", () => {
-  it("computes severity from accumulated findings", async () => {
-    const state = makeState({
-      findings: [
-        { id: "f-1", severity: "warning", category: "unassigned", title: "t", description: "d", evidence: "e", recommendation: "r" },
-        { id: "f-2", severity: "critical", category: "empty_sprint", title: "t", description: "d", evidence: "e", recommendation: "r" },
-        { id: "f-3", severity: "info", category: "overloaded", title: "t", description: "d", evidence: "e", recommendation: "r" },
-      ],
-    });
-    const result = await mergeFindings(state);
-    expect(result.severity).toBe("critical");
+    const promptContent = (mockInvoke.mock.calls[0] as unknown[])[0] as Array<{ content: string }>;
+    const prompt = promptContent[0]!.content;
+    expect(prompt).toContain("ASSIGNEE WORKLOAD");
+    expect(prompt).toContain("STANDUP DATA");
+    expect(prompt).toContain("user-1");
   });
 
-  it("returns clean when no findings", async () => {
-    const state = makeState({ findings: [] });
-    const result = await mergeFindings(state);
+  it("returns clean severity on LLM failure", async () => {
+    mockInvoke.mockRejectedValueOnce(new Error("API error"));
+    const state = makeState({ issues: [{ id: "a", title: "Test", status: "todo" }] });
+    const result = await analyzeHealth(state);
+    expect(result.findings).toEqual([]);
     expect(result.severity).toBe("clean");
   });
 });

@@ -40,6 +40,7 @@ function makeState(
     proposedActions: [],
     humanDecision: null,
     contextDocument: null,
+    dataChanged: true,
     errors: [],
     ...overrides,
   };

@@ -188,176 +188,41 @@ function buildSprintMembership(state: FleetGraphStateType): { sprintIssueIds: Se
 }
 
 // ===========================================================================
-// DOMAIN ANALYZER 1: Issues
-// Categories: unassigned, security, duplicate, unscheduled_high_priority
+// PROACTIVE: Unified health analysis (single LLM call, all categories)
 // ===========================================================================
 
-export async function analyzeIssues(
+export async function analyzeHealth(
   state: FleetGraphStateType
 ): Promise<Partial<FleetGraphStateType>> {
-  if (state.issues.length === 0) {
-    console.log("[analyze_issues] no issues to analyze, skipping");
-    return { findings: [] };
-  }
-
   const issues = state.issues;
-  const { sprintIssueIds } = buildSprintMembership(state);
+  const allSprints = (state.allSprints ?? []) as Record<string, unknown>[];
+  const sd = state.sprintData as Record<string, unknown> | null;
   const now = new Date().toISOString();
 
-  // Pre-check for logging
+  const hasAnyData =
+    issues.length > 0 ||
+    sd !== null ||
+    allSprints.length > 0 ||
+    state.teamGrid !== null ||
+    state.standupStatus !== null;
+
+  if (!hasAnyData) {
+    console.log("[analyze_health] no data available, skipping LLM");
+    return { findings: [], severity: "clean" };
+  }
+
+  // --- Deterministic pre-computation ---
+
+  // Sprint membership
+  const { sprintIssueIds, membershipJson } = buildSprintMembership(state);
+  const noSprint = issues.filter(i => !sprintIssueIds.has(i.id as string));
+  const emptySprints = allSprints.filter(s => (Number(s.issue_count) || 0) === 0);
   const unassigned = issues.filter(i => !i.assignee_id);
   const highPriUnsched = issues.filter(i =>
     (i.priority === "urgent" || i.priority === "high") && !sprintIssueIds.has(i.id as string)
   );
-  console.log(`[analyze_issues] ${issues.length} issues, ${unassigned.length} unassigned, ${highPriUnsched.length} high-pri unscheduled`);
 
-  const prompt = `You are an issue health analyst for Ship, a project management tool.
-Today's date: ${now}
-
-Analyze ONLY the issues below. Create ONE finding per CATEGORY. List ALL affected issue IDs in affectedDocumentIds.
-Use unique IDs: "issue-1", "issue-2", etc. MAXIMUM 5 findings.
-
-=== CATEGORIES (only use these) ===
-
-1. UNASSIGNED ISSUES (category: "unassigned"): Issues where assignee_id is null.
-   Severity: warning. ONE finding listing ALL unassigned issue IDs.
-
-2. UNOWNED SECURITY ISSUES (category: "security"): Issues with security keywords (XSS, vulnerability, CVE, auth bypass, injection, CSRF) in the title AND no assignee_id.
-   Severity: critical. ONE finding. Only flag if BOTH conditions met: security keyword AND unassigned.
-
-3. DUPLICATE ISSUES (category: "duplicate"): Issues with very similar or identical titles.
-   Severity: warning. One finding per duplicate group.
-
-4. UNSCHEDULED HIGH-PRIORITY (category: "unscheduled_high_priority"): Issues with priority "urgent" or "high" that are NOT in any sprint (not in the sprint membership list below).
-   Severity: warning. ONE finding listing ALL affected issue IDs.
-
-=== RULES ===
-- ALWAYS include the "findings" array, even if empty.
-- Keep evidence and description concise (under 200 chars each).
-- Only report problems you can verify from the data. Do not hallucinate.
-- affectedDocumentType should be "issue" for all findings.
-
-=== ISSUES (${issues.length} total — active, non-done/non-cancelled) ===
-${JSON.stringify(issues.map(i => ({ id: i.id, title: i.title, status: i.status, assignee_id: i.assignee_id || null, priority: i.priority || null })))}
-
-=== SPRINT MEMBERSHIP (issue IDs that belong to a sprint) ===
-${sprintIssueIds.size > 0 ? JSON.stringify([...sprintIssueIds]) : "No sprint membership data — cannot determine unscheduled issues, skip that category"}
-
-=== INSTRUCTIONS ===
-- If no problems found, return empty findings with a brief healthy summary.
-- Be specific: cite actual issue IDs and titles in evidence.`;
-
-  try {
-    console.log(`[analyze_issues] invoking LLM, prompt ~${Math.round(prompt.length / 1000)}k chars`);
-    const findings = await invokeWithTool(prompt, "issue_analysis", "analyze_issues");
-    console.log(`[analyze_issues] ${findings.length} findings`);
-    return { findings };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[analyze_issues] LLM failed: ${msg}`);
-    return { findings: [], errors: [`analyze_issues: ${msg}`] };
-  }
-}
-
-// ===========================================================================
-// DOMAIN ANALYZER 2: Sprints
-// Categories: empty_sprint, missing_sprint, stale
-// ===========================================================================
-
-export async function analyzeSprints(
-  state: FleetGraphStateType
-): Promise<Partial<FleetGraphStateType>> {
-  const allSprints = (state.allSprints ?? []) as Record<string, unknown>[];
-  const sd = state.sprintData as Record<string, unknown> | null;
-
-  if (allSprints.length === 0 && !sd) {
-    console.log("[analyze_sprints] no sprint data to analyze, skipping");
-    return { findings: [] };
-  }
-
-  const issues = state.issues;
-  const { sprintIssueIds, membershipJson } = buildSprintMembership(state);
-  const noSprint = issues.filter(i => !sprintIssueIds.has(i.id as string));
-  const emptySprints = allSprints.filter(s => (Number(s.issue_count) || 0) === 0);
-  const now = new Date().toISOString();
-
-  console.log(`[analyze_sprints] ${allSprints.length} sprints, ${emptySprints.length} empty, ${noSprint.length} issues missing sprint`);
-
-  const prompt = `You are a sprint health analyst for Ship, a project management tool.
-Today's date: ${now}
-
-Analyze sprint health. Create ONE finding per CATEGORY. Use unique IDs: "sprint-1", "sprint-2", etc. MAXIMUM 5 findings.
-
-=== CATEGORIES (only use these) ===
-
-1. EMPTY SPRINTS (category: "empty_sprint"): Sprints with issue_count of 0.
-   Severity: critical. One finding per empty sprint. Set affectedDocumentType to "sprint" and affectedDocumentIds to the sprint ID.
-
-2. MISSING SPRINT (category: "missing_sprint"): Active issues not in any sprint.
-   Severity: info. ONE finding listing ALL affected issue IDs in affectedDocumentIds (type: "issue").
-
-3. STALE IN-PROGRESS (category: "stale"): Issues with status "in_progress" in the active sprint that may be stuck.
-   Severity: warning. ONE finding listing affected issue IDs.
-
-=== RULES ===
-- ALWAYS include the "findings" array, even if empty.
-- Keep evidence and description concise (under 200 chars each).
-- Only report problems you can verify from the data.
-
-=== ALL SPRINTS (${allSprints.length} total) ===
-${JSON.stringify(allSprints.map(s => ({ id: s.id, name: s.name, program_prefix: s.program_prefix, issue_count: s.issue_count, completed_count: s.completed_count, started_count: s.started_count })))}
-
-=== SPRINT ISSUE MEMBERSHIP ===
-${membershipJson}
-
-=== ACTIVE ISSUES NOT IN ANY SPRINT (${noSprint.length} total) ===
-${noSprint.length > 0 ? JSON.stringify(noSprint.map(i => ({ id: i.id, title: i.title, status: i.status, priority: i.priority || null }))) : "All active issues are assigned to sprints"}
-
-=== ACTIVE SPRINT ISSUES (for stale detection) ===
-${(() => {
-  const sprintIssues = (sd?.sprintIssues ?? []) as Array<Record<string, unknown>>;
-  const inProgress = sprintIssues.filter(i => {
-    const status = (i.state ?? i.status ?? "") as string;
-    return status === "in_progress" || status === "in-progress";
-  });
-  return inProgress.length > 0
-    ? JSON.stringify(inProgress.map(i => ({ id: i.id, title: i.title, status: i.state ?? i.status, updated_at: i.updated_at })))
-    : "No in-progress issues in active sprint";
-})()}
-
-=== INSTRUCTIONS ===
-- If all sprints are healthy and all issues are scheduled, return empty findings.
-- Be specific: cite sprint names, issue IDs, counts.`;
-
-  try {
-    console.log(`[analyze_sprints] invoking LLM, prompt ~${Math.round(prompt.length / 1000)}k chars`);
-    const findings = await invokeWithTool(prompt, "sprint_analysis", "analyze_sprints");
-    console.log(`[analyze_sprints] ${findings.length} findings`);
-    return { findings };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[analyze_sprints] LLM failed: ${msg}`);
-    return { findings: [], errors: [`analyze_sprints: ${msg}`] };
-  }
-}
-
-// ===========================================================================
-// DOMAIN ANALYZER 3: Team / Workload
-// Categories: overloaded, blocked
-// ===========================================================================
-
-export async function analyzeTeam(
-  state: FleetGraphStateType
-): Promise<Partial<FleetGraphStateType>> {
-  const issues = state.issues;
-  if (issues.length === 0) {
-    console.log("[analyze_team] no issues to analyze workload, skipping");
-    return { findings: [] };
-  }
-
-  const now = new Date().toISOString();
-
-  // Build assignee workload summary deterministically
+  // Workload summary
   const assigneeCounts = new Map<string, { count: number; inProgress: number; titles: string[] }>();
   for (const i of issues) {
     const aid = i.assignee_id as string | null;
@@ -369,7 +234,6 @@ export async function analyzeTeam(
     if (entry.titles.length < 5) entry.titles.push(i.title as string);
     assigneeCounts.set(aid, entry);
   }
-
   const workloadSummary = [...assigneeCounts.entries()].map(([id, data]) => ({
     assignee_id: id,
     total_issues: data.count,
@@ -377,118 +241,117 @@ export async function analyzeTeam(
     sample_titles: data.titles,
   }));
 
-  // Check for blocked issues
+  // Blocked issues
   const blocked = issues.filter(i => {
     const status = (i.status ?? "") as string;
     return status === "blocked";
   });
 
-  console.log(`[analyze_team] ${workloadSummary.length} assignees, max load=${Math.max(0, ...workloadSummary.map(w => w.total_issues))}, ${blocked.length} blocked`);
+  // In-progress sprint issues (for stale detection)
+  const sprintInProgress = (() => {
+    const sprintIssues = (sd?.sprintIssues ?? []) as Array<Record<string, unknown>>;
+    return sprintIssues.filter(i => {
+      const status = (i.state ?? i.status ?? "") as string;
+      return status === "in_progress" || status === "in-progress";
+    });
+  })();
 
-  const prompt = `You are a team workload analyst for Ship, a project management tool.
+  console.log(
+    `[analyze_health] ${issues.length} issues, ${unassigned.length} unassigned, ` +
+    `${highPriUnsched.length} high-pri unscheduled, ${allSprints.length} sprints, ` +
+    `${emptySprints.length} empty, ${blocked.length} blocked, ` +
+    `${workloadSummary.length} assignees`
+  );
+
+  // --- Build unified prompt ---
+
+  const prompt = `You are a project health analyst for Ship, a project management tool.
 Today's date: ${now}
 
-Analyze team workload distribution and blocked issues. Create ONE finding per CATEGORY.
-Use unique IDs: "team-1", "team-2", etc. MAXIMUM 3 findings.
+Analyze ALL the data below. Create ONE finding per CATEGORY. MAXIMUM 8 findings total.
+Use unique IDs: "finding-1", "finding-2", etc.
 
 === CATEGORIES (only use these) ===
 
-1. OVERLOADED TEAM MEMBER (category: "overloaded"): Any assignee with 4+ active issues, especially with 2+ in-progress simultaneously.
-   Severity: info. One finding per overloaded person. Set affectedDocumentIds to their issue IDs, affectedDocumentType to "issue".
+ISSUE CATEGORIES:
+1. UNASSIGNED ISSUES (category: "unassigned"): Issues where assignee_id is null.
+   Severity: warning. ONE finding listing ALL unassigned issue IDs. affectedDocumentType: "issue".
 
-2. BLOCKED ISSUES (category: "blocked"): Issues with status "blocked".
-   Severity: critical. ONE finding listing ALL blocked issue IDs.
+2. UNOWNED SECURITY ISSUES (category: "security"): Issues with security keywords (XSS, vulnerability, CVE, auth bypass, injection, CSRF) in the title AND no assignee_id.
+   Severity: critical. ONE finding. Only flag if BOTH conditions met. affectedDocumentType: "issue".
+
+3. DUPLICATE ISSUES (category: "duplicate"): Issues with very similar or identical titles.
+   Severity: warning. One finding per duplicate group. affectedDocumentType: "issue".
+
+4. UNSCHEDULED HIGH-PRIORITY (category: "unscheduled_high_priority"): Issues with priority "urgent" or "high" NOT in any sprint.
+   Severity: warning. ONE finding listing ALL affected issue IDs. affectedDocumentType: "issue".
+
+SPRINT CATEGORIES:
+5. EMPTY SPRINTS (category: "empty_sprint"): Sprints with issue_count of 0.
+   Severity: critical. One finding per empty sprint. affectedDocumentType: "sprint", affectedDocumentIds: the sprint ID.
+
+6. MISSING SPRINT (category: "missing_sprint"): Active issues not in any sprint.
+   Severity: info. ONE finding listing ALL affected issue IDs. affectedDocumentType: "issue".
+
+7. STALE IN-PROGRESS (category: "stale"): Issues with status "in_progress" that appear stuck.
+   Severity: warning. ONE finding. affectedDocumentType: "issue".
+
+TEAM CATEGORIES:
+8. OVERLOADED TEAM MEMBER (category: "overloaded"): Any assignee with 4+ active issues, especially 2+ in-progress.
+   Severity: info. One finding per overloaded person. affectedDocumentType: "issue".
+
+9. BLOCKED ISSUES (category: "blocked"): Issues with status "blocked".
+   Severity: critical. ONE finding listing ALL blocked issue IDs. affectedDocumentType: "issue".
+
+STANDUP CATEGORIES:
+10. STANDUP COMPLIANCE (category: "other"): Missing standup updates or participation below 70%.
+    Severity: info or warning. affectedDocumentType: "person".
 
 === RULES ===
 - ALWAYS include the "findings" array, even if empty.
 - Keep evidence and description concise (under 200 chars each).
-- Only report problems you can verify from the data.
+- Only report problems you can verify from the data. Do not hallucinate.
+- One finding per category. List ALL affected IDs in affectedDocumentIds.
 
-=== ASSIGNEE WORKLOAD ===
-${JSON.stringify(workloadSummary)}
+=== ISSUES (${issues.length} active, non-done/non-cancelled) ===
+${issues.length > 0 ? JSON.stringify(issues.map(i => ({ id: i.id, title: i.title, status: i.status, assignee_id: i.assignee_id || null, priority: i.priority || null }))) : "No issues"}
+
+=== SPRINT DATA (${allSprints.length} sprints) ===
+${allSprints.length > 0 ? JSON.stringify(allSprints.map(s => ({ id: s.id, name: s.name, program_prefix: s.program_prefix, issue_count: s.issue_count, completed_count: s.completed_count, started_count: s.started_count }))) : "No sprint data"}
+
+=== SPRINT ISSUE MEMBERSHIP ===
+${membershipJson}
+
+=== ISSUES NOT IN ANY SPRINT (${noSprint.length}) ===
+${noSprint.length > 0 ? JSON.stringify(noSprint.map(i => ({ id: i.id, title: i.title, status: i.status, priority: i.priority || null }))) : "All issues are in sprints"}
+
+=== IN-PROGRESS SPRINT ISSUES (for stale detection, ${sprintInProgress.length}) ===
+${sprintInProgress.length > 0 ? JSON.stringify(sprintInProgress.map(i => ({ id: i.id, title: i.title, status: i.state ?? i.status, updated_at: i.updated_at }))) : "No in-progress issues"}
+
+=== ASSIGNEE WORKLOAD (${workloadSummary.length} assignees) ===
+${workloadSummary.length > 0 ? JSON.stringify(workloadSummary) : "No assignee data"}
 
 === BLOCKED ISSUES (${blocked.length}) ===
 ${blocked.length > 0 ? JSON.stringify(blocked.map(i => ({ id: i.id, title: i.title, assignee_id: i.assignee_id || null, priority: i.priority || null }))) : "No blocked issues"}
 
-=== INSTRUCTIONS ===
-- If workload is balanced and nothing is blocked, return empty findings.
-- Be specific: cite assignee IDs, issue counts, issue titles.`;
-
-  try {
-    console.log(`[analyze_team] invoking LLM, prompt ~${Math.round(prompt.length / 1000)}k chars`);
-    const findings = await invokeWithTool(prompt, "team_analysis", "analyze_team");
-    console.log(`[analyze_team] ${findings.length} findings`);
-    return { findings };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[analyze_team] LLM failed: ${msg}`);
-    return { findings: [], errors: [`analyze_team: ${msg}`] };
-  }
-}
-
-// ===========================================================================
-// DOMAIN ANALYZER 4: Standups
-// Categories: other (standup compliance, missing updates)
-// ===========================================================================
-
-export async function analyzeStandups(
-  state: FleetGraphStateType
-): Promise<Partial<FleetGraphStateType>> {
-  if (!state.standupStatus) {
-    console.log("[analyze_standups] no standup data to analyze, skipping");
-    return { findings: [] };
-  }
-
-  const now = new Date().toISOString();
-
-  const prompt = `You are a standup compliance analyst for Ship, a project management tool.
-Today's date: ${now}
-
-Analyze standup participation and flag gaps. Use unique IDs: "standup-1", "standup-2", etc. MAXIMUM 3 findings.
-
-=== CATEGORIES (only use these) ===
-
-1. MISSING STANDUP UPDATES (category: "other"): Team members who have not submitted standup updates.
-   Severity: info. ONE finding listing all members who missed standups.
-
-2. STANDUP PARTICIPATION LOW (category: "other"): If overall standup submission rate is below 70%.
-   Severity: warning. ONE finding with the participation rate and who is missing.
-
-=== RULES ===
-- ALWAYS include the "findings" array, even if empty.
-- Keep evidence and description concise (under 200 chars each).
-- affectedDocumentType should be "person" for standup findings.
-- Only report problems you can verify from the data.
-
 === STANDUP DATA ===
-${JSON.stringify(state.standupStatus)}
+${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data — skip standup categories"}
 
 === INSTRUCTIONS ===
-- If all team members have submitted standups, return empty findings.
-- Be specific: cite names or IDs of team members who missed standups.`;
+- If no problems found, return empty findings with a brief healthy summary.
+- Be specific: cite actual issue IDs, titles, sprint names, counts.`;
 
   try {
-    console.log(`[analyze_standups] invoking LLM, prompt ~${Math.round(prompt.length / 1000)}k chars`);
-    const findings = await invokeWithTool(prompt, "standup_analysis", "analyze_standups");
-    console.log(`[analyze_standups] ${findings.length} findings`);
-    return { findings };
+    console.log(`[analyze_health] invoking LLM, prompt ~${Math.round(prompt.length / 1000)}k chars`);
+    const findings = await invokeWithTool(prompt, "health_analysis", "analyze_health");
+    const severity = determineSeverity(findings);
+    console.log(`[analyze_health] ${findings.length} findings, severity=${severity}`);
+    return { findings, severity };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[analyze_standups] LLM failed: ${msg}`);
-    return { findings: [], errors: [`analyze_standups: ${msg}`] };
+    console.error(`[analyze_health] LLM failed: ${msg}`);
+    return { findings: [], severity: "clean", errors: [`analyze_health: ${msg}`] };
   }
-}
-
-// ===========================================================================
-// MERGE NODE: Compute severity from accumulated findings
-// ===========================================================================
-
-export async function mergeFindings(
-  state: FleetGraphStateType
-): Promise<Partial<FleetGraphStateType>> {
-  const severity = determineSeverity(state.findings);
-  console.log(`[merge_findings] ${state.findings.length} total findings from all analyzers, severity=${severity}`);
-  return { severity };
 }
 
 // ===========================================================================

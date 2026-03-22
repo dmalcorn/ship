@@ -5,14 +5,13 @@ import { isInterruptedResult } from "../utils/graph-helpers.js";
 // Mock all external dependencies to test graph wiring in isolation
 
 const mockInvoke = vi.fn();
-const mockWithStructuredOutput = vi.fn((_schema?: unknown, _opts?: unknown) => ({ invoke: mockInvoke }));
 
 vi.mock("@langchain/anthropic", () => {
   return {
     ChatAnthropic: class MockChatAnthropic {
       constructor() {}
-      withStructuredOutput(_schema: unknown, _opts: unknown) {
-        return mockWithStructuredOutput(_schema, _opts);
+      invoke(...args: unknown[]) {
+        return mockInvoke(...args);
       }
     },
   };
@@ -26,7 +25,37 @@ vi.mock("langsmith/traceable", () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+// Reset change detection hash between tests
+const { invalidateDataHash } = await import("../nodes/change-detection.js");
 const { buildProactiveGraph } = await import("./proactive.js");
+
+// LLM response with tool_calls (native Anthropic format used by analyze_health)
+function makeLlmResponse(findings: Record<string, unknown>[]) {
+  return {
+    tool_calls: [
+      {
+        args: {
+          findings,
+          summary: `${findings.length} issue(s) found`,
+        },
+      },
+    ],
+    content: [],
+  };
+}
+
+// Standard finding for tests
+const testFinding = {
+  id: "finding-1",
+  severity: "warning",
+  category: "unassigned",
+  title: "Unassigned issue",
+  description: "Issue has no owner",
+  evidence: "Issue issue-1: Fix auth bug has no assignee",
+  recommendation: "Assign an owner",
+  affectedDocumentIds: ["issue-1"],
+  affectedDocumentType: "issue",
+};
 
 // Reusable mock setup for findings path
 function setupFindingsMocks() {
@@ -45,23 +74,14 @@ function setupFindingsMocks() {
     statusText: "OK",
   });
 
-  mockInvoke.mockResolvedValueOnce({
-    findings: [
-      {
-        id: "finding-1",
-        severity: "warning",
-        title: "Unassigned issue",
-        description: "Issue has no owner",
-        evidence: "Issue issue-1: Fix auth bug has no assignee",
-        recommendation: "Assign an owner",
-      },
-    ],
-    summary: "1 issue found",
-  });
+  // Single LLM call for analyze_health
+  mockInvoke.mockResolvedValueOnce(makeLlmResponse([testFinding]));
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Ensure change detection doesn't skip on cached hash
+  invalidateDataHash();
 });
 
 describe("proactive graph topology", () => {
@@ -79,11 +99,8 @@ describe("proactive graph topology", () => {
       statusText: "OK",
     });
 
-    // Mock LLM — clean run
-    mockInvoke.mockResolvedValueOnce({
-      findings: [],
-      summary: "Everything looks healthy",
-    });
+    // Mock LLM — clean run (single call)
+    mockInvoke.mockResolvedValueOnce(makeLlmResponse([]));
 
     const graph = buildProactiveGraph();
     const result = await graph.invoke(
@@ -96,7 +113,7 @@ describe("proactive graph topology", () => {
 
     expect(result.severity).toBe("clean");
     expect(result.findings).toEqual([]);
-    // AC #4: confirmation_gate never reached — humanDecision stays null
+    // confirmation_gate never reached — humanDecision stays null
     expect(result.humanDecision).toBeNull();
     expect(result.proposedActions).toEqual([]);
   });
@@ -108,7 +125,7 @@ describe("proactive graph topology", () => {
     const threadId = "test-interrupt-payload";
     const config = { configurable: { thread_id: threadId } };
 
-    // AC #1: Graph should interrupt — returns with __interrupt__ key (no throw with MemorySaver)
+    // Graph should interrupt — returns with __interrupt__ key
     const result = await graph.invoke(
       {
         triggerType: "proactive" as const,
@@ -148,7 +165,7 @@ describe("proactive graph topology", () => {
     );
     expect(isInterruptedResult(initial)).toBe(true);
 
-    // AC #2: Resume with confirm — graph completes
+    // Resume with confirm — graph completes
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resumeCmd = new Command({ resume: { decision: "confirm" } }) as any;
     const result = await graph.invoke(resumeCmd, config);
@@ -156,7 +173,6 @@ describe("proactive graph topology", () => {
     expect(result.humanDecision).toBe("confirm");
     expect(result.findings).toHaveLength(1);
     expect(result.proposedActions).toHaveLength(1);
-    // Should NOT be interrupted anymore
     expect(isInterruptedResult(result)).toBe(false);
   });
 
@@ -174,7 +190,7 @@ describe("proactive graph topology", () => {
     );
     expect(isInterruptedResult(initial)).toBe(true);
 
-    // AC #3: Resume with dismiss — graph completes
+    // Resume with dismiss — graph completes
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resumeCmd = new Command({ resume: { decision: "dismiss" } }) as any;
     const result = await graph.invoke(resumeCmd, config);
@@ -185,7 +201,6 @@ describe("proactive graph topology", () => {
   });
 
   it("each thread has isolated state — separate threadIds don't interfere", async () => {
-    // Task 3.3: MemorySaver isolation — two separate threads
     setupFindingsMocks();
     const graph = buildProactiveGraph();
 
@@ -198,16 +213,14 @@ describe("proactive graph topology", () => {
     expect(isInterruptedResult(initialA)).toBe(true);
 
     // Thread B — clean run (fresh mocks needed)
+    invalidateDataHash();
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => [],
       status: 200,
       statusText: "OK",
     });
-    mockInvoke.mockResolvedValueOnce({
-      findings: [],
-      summary: "Everything looks healthy",
-    });
+    mockInvoke.mockResolvedValueOnce(makeLlmResponse([]));
 
     const configB = { configurable: { thread_id: "thread-isolation-B" } };
     const resultB = await graph.invoke(
@@ -229,7 +242,6 @@ describe("proactive graph topology", () => {
   });
 
   it("double-resume on already-completed thread returns completed state", async () => {
-    // Task 4.2: After resume completes, a second resume should not crash
     setupFindingsMocks();
     const graph = buildProactiveGraph();
     const threadId = "test-double-resume";
@@ -271,5 +283,33 @@ describe("proactive graph topology", () => {
     expect(result.errors.length).toBeGreaterThan(0);
     // confirmation_gate should NOT be reached on degrade path
     expect(result.humanDecision).toBeNull();
+  });
+
+  it("skips LLM call when data is unchanged (change detection)", async () => {
+    // First run: data present, LLM called
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [],
+      status: 200,
+      statusText: "OK",
+    });
+    mockInvoke.mockResolvedValueOnce(makeLlmResponse([]));
+
+    const graph = buildProactiveGraph();
+    const result1 = await graph.invoke(
+      { triggerType: "proactive" as const, workspaceId: "test-ws" },
+      { configurable: { thread_id: "test-cache-1" } }
+    );
+    expect(result1.severity).toBe("clean");
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+
+    // Second run: same data — LLM should NOT be called
+    const result2 = await graph.invoke(
+      { triggerType: "proactive" as const, workspaceId: "test-ws" },
+      { configurable: { thread_id: "test-cache-2" } }
+    );
+    expect(result2.severity).toBe("clean");
+    // Still only 1 LLM call total — second run was skipped by change detection
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
   });
 });
