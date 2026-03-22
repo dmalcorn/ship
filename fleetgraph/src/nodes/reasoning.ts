@@ -427,6 +427,59 @@ ${blocked.length > 0 ? JSON.stringify(blocked.map(i => ({ id: i.id, title: i.tit
 }
 
 // ===========================================================================
+// DOMAIN ANALYZER 4: Standups
+// Categories: other (standup compliance, missing updates)
+// ===========================================================================
+
+export async function analyzeStandups(
+  state: FleetGraphStateType
+): Promise<Partial<FleetGraphStateType>> {
+  if (!state.standupStatus) {
+    console.log("[analyze_standups] no standup data to analyze, skipping");
+    return { findings: [] };
+  }
+
+  const now = new Date().toISOString();
+
+  const prompt = `You are a standup compliance analyst for Ship, a project management tool.
+Today's date: ${now}
+
+Analyze standup participation and flag gaps. Use unique IDs: "standup-1", "standup-2", etc. MAXIMUM 3 findings.
+
+=== CATEGORIES (only use these) ===
+
+1. MISSING STANDUP UPDATES (category: "other"): Team members who have not submitted standup updates.
+   Severity: info. ONE finding listing all members who missed standups.
+
+2. STANDUP PARTICIPATION LOW (category: "other"): If overall standup submission rate is below 70%.
+   Severity: warning. ONE finding with the participation rate and who is missing.
+
+=== RULES ===
+- ALWAYS include the "findings" array, even if empty.
+- Keep evidence and description concise (under 200 chars each).
+- affectedDocumentType should be "person" for standup findings.
+- Only report problems you can verify from the data.
+
+=== STANDUP DATA ===
+${JSON.stringify(state.standupStatus)}
+
+=== INSTRUCTIONS ===
+- If all team members have submitted standups, return empty findings.
+- Be specific: cite names or IDs of team members who missed standups.`;
+
+  try {
+    console.log(`[analyze_standups] invoking LLM, prompt ~${Math.round(prompt.length / 1000)}k chars`);
+    const findings = await invokeWithTool(prompt, "standup_analysis", "analyze_standups");
+    console.log(`[analyze_standups] ${findings.length} findings`);
+    return { findings };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[analyze_standups] LLM failed: ${msg}`);
+    return { findings: [], errors: [`analyze_standups: ${msg}`] };
+  }
+}
+
+// ===========================================================================
 // MERGE NODE: Compute severity from accumulated findings
 // ===========================================================================
 

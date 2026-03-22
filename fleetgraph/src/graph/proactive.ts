@@ -3,7 +3,7 @@ import { MemorySaver } from "@langchain/langgraph-checkpoint";
 import { FleetGraphState } from "../state.js";
 import { resolveContext } from "../nodes/context.js";
 import { fetchIssues, fetchSprint, fetchTeam, fetchStandups } from "../nodes/fetch.js";
-import { analyzeIssues, analyzeSprints, analyzeTeam, mergeFindings } from "../nodes/reasoning.js";
+import { analyzeIssues, analyzeSprints, analyzeTeam, analyzeStandups, mergeFindings } from "../nodes/reasoning.js";
 import {
   proposeActions,
   confirmationGate,
@@ -16,7 +16,7 @@ import {
  *
  * Flow:
  *   START -> resolve_context -> [fetch_issues, fetch_sprint, fetch_team, fetch_standups] (parallel)
- *         -> [analyze_issues, analyze_sprints, analyze_team] (parallel)
+ *         -> [analyze_issues, analyze_sprints, analyze_team, analyze_standups] (parallel)
  *         -> merge_findings -> (clean? -> log_clean_run -> END)
  *                           -> (findings? -> propose_actions -> confirmation_gate -> END)
  *         -> (errors? -> graceful_degrade -> END)
@@ -32,6 +32,7 @@ export function buildProactiveGraph() {
     .addNode("analyze_issues", analyzeIssues)
     .addNode("analyze_sprints", analyzeSprints)
     .addNode("analyze_team", analyzeTeam)
+    .addNode("analyze_standups", analyzeStandups)
     .addNode("merge_findings", mergeFindings)
     .addNode("propose_actions", proposeActions)
     .addNode("confirmation_gate", confirmationGate)
@@ -63,10 +64,16 @@ export function buildProactiveGraph() {
     .addEdge("fetch_team", "analyze_team")
     .addEdge("fetch_standups", "analyze_team")
 
+    .addEdge("fetch_issues", "analyze_standups")
+    .addEdge("fetch_sprint", "analyze_standups")
+    .addEdge("fetch_team", "analyze_standups")
+    .addEdge("fetch_standups", "analyze_standups")
+
     // All analyzers converge into merge
     .addEdge("analyze_issues", "merge_findings")
     .addEdge("analyze_sprints", "merge_findings")
     .addEdge("analyze_team", "merge_findings")
+    .addEdge("analyze_standups", "merge_findings")
 
     // Conditional branching after merge
     .addConditionalEdges("merge_findings", (state) => {
