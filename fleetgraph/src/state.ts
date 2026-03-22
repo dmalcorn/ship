@@ -108,7 +108,7 @@ export const FleetGraphState = Annotation.Root({
 
   // --- Reasoning output ---
   findings: Annotation<Finding[]>({
-    reducer: (_, next) => next,
+    reducer: (prev, next) => [...prev, ...next],
     default: () => [],
   }),
   severity: Annotation<"clean" | "info" | "warning" | "critical">({

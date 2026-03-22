@@ -9,12 +9,11 @@ const model = new ChatAnthropic({
   maxTokens: 8192,
 });
 
-/**
- * Invoke the model with a forced tool call using raw Anthropic tool format.
- * Bypasses LangChain's broken Zod-to-JSON-Schema conversion.
- */
+// ---------------------------------------------------------------------------
+// Shared tool invocation (native Anthropic format — bypasses LangChain bugs)
+// ---------------------------------------------------------------------------
+
 async function invokeWithTool(prompt: string, toolName: string, label: string): Promise<Finding[]> {
-  // Define tool in Anthropic's native format (bypasses LangChain's Zod conversion)
   const nativeTool = {
     name: toolName,
     description: "Output structured project health findings",
@@ -29,7 +28,7 @@ async function invokeWithTool(prompt: string, toolName: string, label: string): 
             type: "object",
             required: ["id", "severity", "category", "title", "description", "evidence", "recommendation"],
             properties: {
-              id: { type: "string", description: "Unique finding identifier, e.g. finding-1" },
+              id: { type: "string", description: "Unique finding identifier, e.g. issue-1" },
               severity: { type: "string", enum: ["info", "warning", "critical"] },
               category: {
                 type: "string",
@@ -46,7 +45,7 @@ async function invokeWithTool(prompt: string, toolName: string, label: string): 
             },
           },
         },
-        summary: { type: "string", description: "Overall project health summary" },
+        summary: { type: "string", description: "Overall domain health summary" },
       },
     },
   };
@@ -56,18 +55,14 @@ async function invokeWithTool(prompt: string, toolName: string, label: string): 
     tool_choice: { type: "tool", name: toolName },
   } as Record<string, unknown>);
 
-  // Extract tool call input from response
   const toolCalls = response.tool_calls;
-  console.log(`[${label}] response has ${toolCalls?.length ?? 0} tool calls, content blocks: ${Array.isArray(response.content) ? response.content.length : 'string'}`);
+  console.log(`[${label}] response has ${toolCalls?.length ?? 0} tool calls`);
 
   if (toolCalls && toolCalls.length > 0) {
-    const call = toolCalls[0]!;
-    const args = call.args as Record<string, unknown>;
-    console.log(`[${label}] tool call name="${call.name}", args keys: ${Object.keys(args ?? {})}, findings count: ${Array.isArray(args?.findings) ? args.findings.length : 'missing'}`);
+    const args = toolCalls[0]!.args as Record<string, unknown>;
+    console.log(`[${label}] findings count: ${Array.isArray(args?.findings) ? args.findings.length : 'missing'}`);
     if (args?.summary) console.log(`[${label}] summary: ${String(args.summary).slice(0, 200)}`);
-    if (Array.isArray(args?.findings)) {
-      return args.findings as Finding[];
-    }
+    if (Array.isArray(args?.findings)) return args.findings as Finding[];
   }
 
   // Fallback: check content blocks for tool_use
@@ -76,18 +71,10 @@ async function invokeWithTool(prompt: string, toolName: string, label: string): 
       const b = block as Record<string, unknown>;
       if (b.type === "tool_use" && b.name === toolName) {
         const input = b.input as Record<string, unknown>;
-        console.log(`[${label}] found tool_use in content, input keys: ${Object.keys(input)}, findings count: ${Array.isArray(input?.findings) ? input.findings.length : 'missing'}`);
-        if (input?.summary) console.log(`[${label}] content summary: ${String(input.summary).slice(0, 300)}`);
-        if (Array.isArray(input?.findings)) {
-          return input.findings as Finding[];
-        }
+        if (Array.isArray(input?.findings)) return input.findings as Finding[];
       }
     }
-  }
-
-  console.warn(`[${label}] no tool call findings found in response`);
-  // Last resort: try extractFindings on any text content
-  if (Array.isArray(response.content)) {
+    // Last resort: text fallback
     const textContent = response.content
       .filter((b: unknown) => (b as Record<string, unknown>).type === "text")
       .map((b: unknown) => (b as Record<string, unknown>).text as string)
@@ -98,54 +85,35 @@ async function invokeWithTool(prompt: string, toolName: string, label: string): 
     }
   }
 
+  console.warn(`[${label}] no findings found in response`);
   return [];
 }
 
+// ---------------------------------------------------------------------------
+// Schemas (used by extractFindings fallback)
+// ---------------------------------------------------------------------------
+
 const DetectionCategorySchema = z.enum([
-  "unassigned",
-  "missing_sprint",
-  "stale",
-  "duplicate",
-  "empty_sprint",
-  "security",
-  "overloaded",
-  "blocked",
-  "missing_ticket_number",
-  "unscheduled_high_priority",
-  "other",
+  "unassigned", "missing_sprint", "stale", "duplicate", "empty_sprint",
+  "security", "overloaded", "blocked", "missing_ticket_number",
+  "unscheduled_high_priority", "other",
 ]);
 
 const FindingSchema = z.object({
-  id: z.string().describe("Unique finding identifier, e.g. finding-1"),
-  severity: z
-    .enum(["info", "warning", "critical"])
-    .describe("Finding severity level"),
-  category: DetectionCategorySchema.describe(
-    "Detection category — must be one of: unassigned, missing_sprint, stale, duplicate, empty_sprint, security, overloaded, blocked, missing_ticket_number, unscheduled_high_priority, other"
-  ),
-  title: z.string().describe("Short finding title"),
-  description: z.string().describe("Detailed finding description"),
-  evidence: z
-    .string()
-    .describe(
-      "Specific evidence: issue IDs, sprint names, timestamps, titles"
-    ),
-  recommendation: z
-    .string()
-    .describe("Actionable recommendation to resolve this finding"),
-  affectedDocumentIds: z
-    .array(z.string())
-    .default([])
-    .describe("UUIDs of the affected issue(s) from the data — use the exact 'id' field values"),
-  affectedDocumentType: z
-    .string()
-    .default("issue")
-    .describe("The type of the primary affected document: issue, sprint, project, program, wiki, or person"),
+  id: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  category: DetectionCategorySchema,
+  title: z.string(),
+  description: z.string(),
+  evidence: z.string(),
+  recommendation: z.string(),
+  affectedDocumentIds: z.array(z.string()).default([]),
+  affectedDocumentType: z.string().default("issue"),
 });
 
 const AnalysisOutputSchema = z.object({
-  findings: z.array(FindingSchema).describe("Array of detected quality issues"),
-  summary: z.string().describe("Overall project health summary"),
+  findings: z.array(FindingSchema),
+  summary: z.string(),
 });
 
 export function determineSeverity(
@@ -157,12 +125,7 @@ export function determineSeverity(
   return "info";
 }
 
-/**
- * Robustly extract findings from LLM text output.
- * Handles: code fences, {findings:[...]}, bare arrays, single objects.
- */
 function extractFindings(text: string, label: string): { findings: Finding[]; summary: string } {
-  // Strip markdown code fences
   let jsonStr = text.trim();
   const fenceMatch = jsonStr.match(/```(?:json)?\s*\r?\n?([\s\S]*?)\r?\n?\s*```/);
   if (fenceMatch) {
@@ -174,48 +137,18 @@ function extractFindings(text: string, label: string): { findings: Finding[]; su
     jsonStr = lines.join("\n").trim();
   }
 
-  console.log(`[${label}] extracted JSON (first 300 chars): ${jsonStr.slice(0, 300)}`);
-
-  // Try parsing as the expected schema first
   try {
     const obj = JSON.parse(jsonStr);
-    if (obj && Array.isArray(obj.findings)) {
-      const parsed = AnalysisOutputSchema.parse(obj);
-      return { findings: parsed.findings, summary: parsed.summary };
-    }
-    // Might be a bare array of findings
-    if (Array.isArray(obj)) {
-      const findings = obj.map((f: unknown) => FindingSchema.parse(f));
-      return { findings, summary: "" };
-    }
-    // Might be a single finding object
-    if (obj && typeof obj.id === "string" && typeof obj.severity === "string") {
-      return { findings: [FindingSchema.parse(obj)], summary: "" };
-    }
-  } catch (e) {
-    console.warn(`[${label}] direct JSON.parse failed: ${e instanceof Error ? e.message : e}`);
-  }
+    if (obj && Array.isArray(obj.findings)) return { findings: AnalysisOutputSchema.parse(obj).findings, summary: obj.summary ?? "" };
+    if (Array.isArray(obj)) return { findings: obj.map((f: unknown) => FindingSchema.parse(f)), summary: "" };
+    if (obj?.id && obj?.severity) return { findings: [FindingSchema.parse(obj)], summary: "" };
+  } catch { /* fall through */ }
 
-  // Last resort: find the largest JSON object or array in the text
   const jsonObjects = jsonStr.match(/\{[\s\S]*\}/g) || [];
   for (const candidate of jsonObjects.sort((a, b) => b.length - a.length)) {
     try {
       const obj = JSON.parse(candidate);
-      if (obj && Array.isArray(obj.findings)) {
-        const parsed = AnalysisOutputSchema.parse(obj);
-        return { findings: parsed.findings, summary: parsed.summary };
-      }
-    } catch { /* try next */ }
-  }
-
-  const jsonArrays = jsonStr.match(/\[[\s\S]*\]/g) || [];
-  for (const candidate of jsonArrays.sort((a, b) => b.length - a.length)) {
-    try {
-      const arr = JSON.parse(candidate);
-      if (Array.isArray(arr) && arr.length > 0) {
-        const findings = arr.map((f: unknown) => FindingSchema.parse(f));
-        return { findings, summary: "" };
-      }
+      if (obj && Array.isArray(obj.findings)) return { findings: AnalysisOutputSchema.parse(obj).findings, summary: obj.summary ?? "" };
     } catch { /* try next */ }
   }
 
@@ -223,144 +156,292 @@ function extractFindings(text: string, label: string): { findings: Finding[]; su
   return { findings: [], summary: "" };
 }
 
-/**
- * Analyze project health — LLM reasons about issues, sprint, team data.
- * Produces structured findings with severity levels across 7 detection categories.
- */
-export async function analyzeHealth(
-  state: FleetGraphStateType
-): Promise<Partial<FleetGraphStateType>> {
-  // If ALL data sources are empty, skip LLM — nothing to analyze
-  const hasAnyData =
-    state.issues.length > 0 ||
-    state.sprintData !== null ||
-    state.teamGrid !== null ||
-    state.standupStatus !== null;
+// ---------------------------------------------------------------------------
+// Helper: build sprint membership data for prompts
+// ---------------------------------------------------------------------------
 
-  if (!hasAnyData) {
-    console.log("[analyze_health] no data available from any source, skipping LLM");
-    return {
-      findings: [],
-      severity: "clean",
-      errors: [
-        "analyze_health: no data available for analysis",
-      ],
-    };
+function buildSprintMembership(state: FleetGraphStateType): { sprintIssueIds: Set<string>; membershipJson: string } {
+  const allSprints = (state.allSprints ?? []) as Record<string, unknown>[];
+  const sd = state.sprintData as Record<string, unknown> | null;
+  const sprintIssueIds = new Set<string>();
+  const membership: Record<string, string[]> = {};
+
+  // Primary sprint issues
+  const primaryIssues = (sd?.sprintIssues ?? []) as Array<Record<string, unknown>>;
+  if (primaryIssues.length > 0) {
+    const name = (sd?.name ?? sd?.id ?? "primary") as string;
+    membership[name] = primaryIssues.map(i => i.id as string);
+    primaryIssues.forEach(i => sprintIssueIds.add(i.id as string));
   }
 
-  // Issues are already filtered and field-extracted by fetchIssues node.
-  // Just pass them through — no duplicate filtering here.
-  const issuesSummary = state.issues;
-  const now = new Date().toISOString();
-
-  // Diagnostic: log data shapes and pre-check what SHOULD be detectable
-  const sd = state.sprintData as Record<string, unknown> | null;
-  const allSprints = (state.allSprints ?? []) as Record<string, unknown>[];
-  const unassigned = issuesSummary.filter((i) => !i.assignee_id);
-  const sprintIssueIds = new Set<string>();
+  // Other sprints
   for (const s of allSprints) {
     const si = s.sprintIssues as Array<Record<string, unknown>> | undefined;
-    if (si) si.forEach((i) => sprintIssueIds.add(i.id as string));
+    if (si) si.forEach(i => sprintIssueIds.add(i.id as string));
   }
-  const noSprint = issuesSummary.filter((i) => !sprintIssueIds.has(i.id as string));
-  const emptySprints = allSprints.filter((s) => (Number(s.issue_count) || 0) === 0);
-  console.log(`[analyze_health] data summary: ${issuesSummary.length} issues, sprint=${sd ? `"${sd.name ?? sd.title}"(issues=${sd.issue_count})` : 'null'}, allSprints=${allSprints.length}, team=${!!state.teamGrid}, standup=${!!state.standupStatus}`);
-  console.log(`[analyze_health] pre-check: ${unassigned.length} unassigned, ${noSprint.length} missing sprint, ${emptySprints.length} empty sprints`);
-  if (unassigned.length > 0) console.log(`[analyze_health] unassigned sample: ${unassigned.slice(0, 3).map(i => `"${i.title}"`).join(', ')}`);
-  if (noSprint.length > 0) console.log(`[analyze_health] no-sprint sample: ${noSprint.slice(0, 3).map(i => `"${i.title}" (priority=${i.priority})`).join(', ')}`);
 
-  const prompt = `You are a project health analyst for a project management tool called Ship.
+  const membershipJson = Object.keys(membership).length > 0
+    ? JSON.stringify(membership)
+    : "Only primary sprint membership available — issues NOT in this list may be unscheduled";
+
+  return { sprintIssueIds, membershipJson };
+}
+
+// ===========================================================================
+// DOMAIN ANALYZER 1: Issues
+// Categories: unassigned, security, duplicate, unscheduled_high_priority
+// ===========================================================================
+
+export async function analyzeIssues(
+  state: FleetGraphStateType
+): Promise<Partial<FleetGraphStateType>> {
+  if (state.issues.length === 0) {
+    console.log("[analyze_issues] no issues to analyze, skipping");
+    return { findings: [] };
+  }
+
+  const issues = state.issues;
+  const { sprintIssueIds } = buildSprintMembership(state);
+  const now = new Date().toISOString();
+
+  // Pre-check for logging
+  const unassigned = issues.filter(i => !i.assignee_id);
+  const highPriUnsched = issues.filter(i =>
+    (i.priority === "urgent" || i.priority === "high") && !sprintIssueIds.has(i.id as string)
+  );
+  console.log(`[analyze_issues] ${issues.length} issues, ${unassigned.length} unassigned, ${highPriUnsched.length} high-pri unscheduled`);
+
+  const prompt = `You are an issue health analyst for Ship, a project management tool.
 Today's date: ${now}
 
-Analyze the following project data and detect problems. Create ONE finding per CATEGORY (not per issue).
-Each finding should list ALL affected issues in affectedDocumentIds.
-Use unique IDs: "finding-1", "finding-2", etc.
-MAXIMUM 10 findings total. Focus on the most critical problems.
+Analyze ONLY the issues below. Create ONE finding per CATEGORY. List ALL affected issue IDs in affectedDocumentIds.
+Use unique IDs: "issue-1", "issue-2", etc. MAXIMUM 5 findings.
 
-=== DETECTION CATEGORIES ===
-
-Each finding MUST include a "category" field from this exact list:
-  unassigned, missing_sprint, duplicate, empty_sprint, security, unscheduled_high_priority, other
+=== CATEGORIES (only use these) ===
 
 1. UNASSIGNED ISSUES (category: "unassigned"): Issues where assignee_id is null.
-   - Severity: warning. ONE finding listing ALL unassigned issue IDs in affectedDocumentIds.
+   Severity: warning. ONE finding listing ALL unassigned issue IDs.
 
-2. UNSCHEDULED HIGH-PRIORITY (category: "unscheduled_high_priority"): Issues with priority "urgent" or "high" not in any sprint.
-   - Severity: warning. ONE finding listing ALL affected issue IDs in affectedDocumentIds.
+2. UNOWNED SECURITY ISSUES (category: "security"): Issues with security keywords (XSS, vulnerability, CVE, auth bypass, injection, CSRF) in the title AND no assignee_id.
+   Severity: critical. ONE finding. Only flag if BOTH conditions met: security keyword AND unassigned.
 
-3. DUPLICATE ISSUES (category: "duplicate"): Issues with very similar titles.
-   - Severity: warning. One finding per duplicate group.
+3. DUPLICATE ISSUES (category: "duplicate"): Issues with very similar or identical titles.
+   Severity: warning. One finding per duplicate group.
 
-4. EMPTY SPRINTS (category: "empty_sprint"): Sprints with issue_count of 0.
-   - Severity: critical. One finding per empty sprint.
-
-5. UNOWNED SECURITY ISSUES (category: "security"): Issues with security keywords (XSS, vulnerability, CVE, auth, injection, CSRF) AND no assignee_id.
-   - Severity: critical. ONE finding listing ALL affected issue IDs.
-
-6. MISSING SPRINT (category: "missing_sprint"): Active issues not in any sprint.
-   - Severity: info. ONE finding listing ALL affected issue IDs in affectedDocumentIds.
+4. UNSCHEDULED HIGH-PRIORITY (category: "unscheduled_high_priority"): Issues with priority "urgent" or "high" that are NOT in any sprint (not in the sprint membership list below).
+   Severity: warning. ONE finding listing ALL affected issue IDs.
 
 === RULES ===
-
-- ALWAYS include the "findings" array in your response, even if empty.
-- Each finding must have: id, severity, category, title, description, evidence, recommendation, affectedDocumentIds, affectedDocumentType.
+- ALWAYS include the "findings" array, even if empty.
 - Keep evidence and description concise (under 200 chars each).
-- If the issues array is empty, return an empty findings array.
-- Only analyze data you actually received.
+- Only report problems you can verify from the data. Do not hallucinate.
+- affectedDocumentType should be "issue" for all findings.
 
-=== PROJECT DATA ===
+=== ISSUES (${issues.length} total — active, non-done/non-cancelled) ===
+${JSON.stringify(issues.map(i => ({ id: i.id, title: i.title, status: i.status, assignee_id: i.assignee_id || null, priority: i.priority || null })))}
 
-ACTIVE ISSUES (${issuesSummary.length} total — already filtered to non-done/non-cancelled):
-${JSON.stringify(issuesSummary.map(i => ({ id: i.id, title: i.title, status: i.status, assignee_id: i.assignee_id || null, priority: i.priority || null })))}
-
-ALL SPRINTS (${allSprints.length} total):
-${allSprints.length > 0 ? JSON.stringify(allSprints.map(s => ({ id: s.id, name: s.name, program_prefix: s.program_prefix, issue_count: s.issue_count, completed_count: s.completed_count, started_count: s.started_count }))) : "No sprint list available"}
-
-SPRINT ISSUE MEMBERSHIP (which issues belong to which sprint):
-${(() => {
-  const membership: Record<string, string[]> = {};
-  const sprintIssues = (sd?.sprintIssues ?? []) as Array<Record<string, unknown>>;
-  if (sprintIssues.length > 0) {
-    membership[(sd?.name ?? sd?.id ?? "primary") as string] = sprintIssues.map(i => i.id as string);
-  }
-  return Object.keys(membership).length > 0 ? JSON.stringify(membership) : "Only primary sprint membership available — issues NOT in this list may be unscheduled";
-})()}
+=== SPRINT MEMBERSHIP (issue IDs that belong to a sprint) ===
+${sprintIssueIds.size > 0 ? JSON.stringify([...sprintIssueIds]) : "No sprint membership data — cannot determine unscheduled issues, skip that category"}
 
 === INSTRUCTIONS ===
-
-- If everything looks healthy across all categories, return an empty findings array with a brief positive summary.
-- Only surface real problems — not cosmetic issues.
-- Be specific in evidence: cite actual issue IDs, titles, sprint names from the data.
-- One finding per problem detected. Do not combine multiple problems.`;
+- If no problems found, return empty findings with a brief healthy summary.
+- Be specific: cite actual issue IDs and titles in evidence.`;
 
   try {
-    console.log(`[analyze_health] invoking Opus with ${issuesSummary.length} issues, prompt ~${Math.round(prompt.length / 1000)}k chars`);
-
-    const findings = await invokeWithTool(prompt, "project_health_analysis", "analyze_health");
-    const severity = determineSeverity(findings);
-
-    console.log(
-      `[analyze_health] ${findings.length} findings, severity=${severity}`
-    );
-    if (findings.length === 0) {
-      console.warn(`[analyze_health] WARNING: LLM returned 0 findings despite pre-check showing detectable issues`);
-    }
-
-    return { findings, severity, errors: [] };
+    console.log(`[analyze_issues] invoking LLM, prompt ~${Math.round(prompt.length / 1000)}k chars`);
+    const findings = await invokeWithTool(prompt, "issue_analysis", "analyze_issues");
+    console.log(`[analyze_issues] ${findings.length} findings`);
+    return { findings };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[analyze_health] LLM FAILED (returning clean): ${msg}`);
-    return {
-      findings: [],
-      severity: "clean",
-      errors: [`analyze_health: ${msg}`],
-    };
+    console.error(`[analyze_issues] LLM failed: ${msg}`);
+    return { findings: [], errors: [`analyze_issues: ${msg}`] };
   }
 }
 
-/**
- * Build context-type-specific analysis instructions for the prompt.
- */
+// ===========================================================================
+// DOMAIN ANALYZER 2: Sprints
+// Categories: empty_sprint, missing_sprint, stale
+// ===========================================================================
+
+export async function analyzeSprints(
+  state: FleetGraphStateType
+): Promise<Partial<FleetGraphStateType>> {
+  const allSprints = (state.allSprints ?? []) as Record<string, unknown>[];
+  const sd = state.sprintData as Record<string, unknown> | null;
+
+  if (allSprints.length === 0 && !sd) {
+    console.log("[analyze_sprints] no sprint data to analyze, skipping");
+    return { findings: [] };
+  }
+
+  const issues = state.issues;
+  const { sprintIssueIds, membershipJson } = buildSprintMembership(state);
+  const noSprint = issues.filter(i => !sprintIssueIds.has(i.id as string));
+  const emptySprints = allSprints.filter(s => (Number(s.issue_count) || 0) === 0);
+  const now = new Date().toISOString();
+
+  console.log(`[analyze_sprints] ${allSprints.length} sprints, ${emptySprints.length} empty, ${noSprint.length} issues missing sprint`);
+
+  const prompt = `You are a sprint health analyst for Ship, a project management tool.
+Today's date: ${now}
+
+Analyze sprint health. Create ONE finding per CATEGORY. Use unique IDs: "sprint-1", "sprint-2", etc. MAXIMUM 5 findings.
+
+=== CATEGORIES (only use these) ===
+
+1. EMPTY SPRINTS (category: "empty_sprint"): Sprints with issue_count of 0.
+   Severity: critical. One finding per empty sprint. Set affectedDocumentType to "sprint" and affectedDocumentIds to the sprint ID.
+
+2. MISSING SPRINT (category: "missing_sprint"): Active issues not in any sprint.
+   Severity: info. ONE finding listing ALL affected issue IDs in affectedDocumentIds (type: "issue").
+
+3. STALE IN-PROGRESS (category: "stale"): Issues with status "in_progress" in the active sprint that may be stuck.
+   Severity: warning. ONE finding listing affected issue IDs.
+
+=== RULES ===
+- ALWAYS include the "findings" array, even if empty.
+- Keep evidence and description concise (under 200 chars each).
+- Only report problems you can verify from the data.
+
+=== ALL SPRINTS (${allSprints.length} total) ===
+${JSON.stringify(allSprints.map(s => ({ id: s.id, name: s.name, program_prefix: s.program_prefix, issue_count: s.issue_count, completed_count: s.completed_count, started_count: s.started_count })))}
+
+=== SPRINT ISSUE MEMBERSHIP ===
+${membershipJson}
+
+=== ACTIVE ISSUES NOT IN ANY SPRINT (${noSprint.length} total) ===
+${noSprint.length > 0 ? JSON.stringify(noSprint.map(i => ({ id: i.id, title: i.title, status: i.status, priority: i.priority || null }))) : "All active issues are assigned to sprints"}
+
+=== ACTIVE SPRINT ISSUES (for stale detection) ===
+${(() => {
+  const sprintIssues = (sd?.sprintIssues ?? []) as Array<Record<string, unknown>>;
+  const inProgress = sprintIssues.filter(i => {
+    const status = (i.state ?? i.status ?? "") as string;
+    return status === "in_progress" || status === "in-progress";
+  });
+  return inProgress.length > 0
+    ? JSON.stringify(inProgress.map(i => ({ id: i.id, title: i.title, status: i.state ?? i.status, updated_at: i.updated_at })))
+    : "No in-progress issues in active sprint";
+})()}
+
+=== INSTRUCTIONS ===
+- If all sprints are healthy and all issues are scheduled, return empty findings.
+- Be specific: cite sprint names, issue IDs, counts.`;
+
+  try {
+    console.log(`[analyze_sprints] invoking LLM, prompt ~${Math.round(prompt.length / 1000)}k chars`);
+    const findings = await invokeWithTool(prompt, "sprint_analysis", "analyze_sprints");
+    console.log(`[analyze_sprints] ${findings.length} findings`);
+    return { findings };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[analyze_sprints] LLM failed: ${msg}`);
+    return { findings: [], errors: [`analyze_sprints: ${msg}`] };
+  }
+}
+
+// ===========================================================================
+// DOMAIN ANALYZER 3: Team / Workload
+// Categories: overloaded, blocked
+// ===========================================================================
+
+export async function analyzeTeam(
+  state: FleetGraphStateType
+): Promise<Partial<FleetGraphStateType>> {
+  const issues = state.issues;
+  if (issues.length === 0) {
+    console.log("[analyze_team] no issues to analyze workload, skipping");
+    return { findings: [] };
+  }
+
+  const now = new Date().toISOString();
+
+  // Build assignee workload summary deterministically
+  const assigneeCounts = new Map<string, { count: number; inProgress: number; titles: string[] }>();
+  for (const i of issues) {
+    const aid = i.assignee_id as string | null;
+    if (!aid) continue;
+    const entry = assigneeCounts.get(aid) ?? { count: 0, inProgress: 0, titles: [] };
+    entry.count++;
+    const status = (i.status ?? "") as string;
+    if (status === "in_progress" || status === "in-progress") entry.inProgress++;
+    if (entry.titles.length < 5) entry.titles.push(i.title as string);
+    assigneeCounts.set(aid, entry);
+  }
+
+  const workloadSummary = [...assigneeCounts.entries()].map(([id, data]) => ({
+    assignee_id: id,
+    total_issues: data.count,
+    in_progress: data.inProgress,
+    sample_titles: data.titles,
+  }));
+
+  // Check for blocked issues
+  const blocked = issues.filter(i => {
+    const status = (i.status ?? "") as string;
+    return status === "blocked";
+  });
+
+  console.log(`[analyze_team] ${workloadSummary.length} assignees, max load=${Math.max(0, ...workloadSummary.map(w => w.total_issues))}, ${blocked.length} blocked`);
+
+  const prompt = `You are a team workload analyst for Ship, a project management tool.
+Today's date: ${now}
+
+Analyze team workload distribution and blocked issues. Create ONE finding per CATEGORY.
+Use unique IDs: "team-1", "team-2", etc. MAXIMUM 3 findings.
+
+=== CATEGORIES (only use these) ===
+
+1. OVERLOADED TEAM MEMBER (category: "overloaded"): Any assignee with 4+ active issues, especially with 2+ in-progress simultaneously.
+   Severity: info. One finding per overloaded person. Set affectedDocumentIds to their issue IDs, affectedDocumentType to "issue".
+
+2. BLOCKED ISSUES (category: "blocked"): Issues with status "blocked".
+   Severity: critical. ONE finding listing ALL blocked issue IDs.
+
+=== RULES ===
+- ALWAYS include the "findings" array, even if empty.
+- Keep evidence and description concise (under 200 chars each).
+- Only report problems you can verify from the data.
+
+=== ASSIGNEE WORKLOAD ===
+${JSON.stringify(workloadSummary)}
+
+=== BLOCKED ISSUES (${blocked.length}) ===
+${blocked.length > 0 ? JSON.stringify(blocked.map(i => ({ id: i.id, title: i.title, assignee_id: i.assignee_id || null, priority: i.priority || null }))) : "No blocked issues"}
+
+=== INSTRUCTIONS ===
+- If workload is balanced and nothing is blocked, return empty findings.
+- Be specific: cite assignee IDs, issue counts, issue titles.`;
+
+  try {
+    console.log(`[analyze_team] invoking LLM, prompt ~${Math.round(prompt.length / 1000)}k chars`);
+    const findings = await invokeWithTool(prompt, "team_analysis", "analyze_team");
+    console.log(`[analyze_team] ${findings.length} findings`);
+    return { findings };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[analyze_team] LLM failed: ${msg}`);
+    return { findings: [], errors: [`analyze_team: ${msg}`] };
+  }
+}
+
+// ===========================================================================
+// MERGE NODE: Compute severity from accumulated findings
+// ===========================================================================
+
+export async function mergeFindings(
+  state: FleetGraphStateType
+): Promise<Partial<FleetGraphStateType>> {
+  const severity = determineSeverity(state.findings);
+  console.log(`[merge_findings] ${state.findings.length} total findings from all analyzers, severity=${severity}`);
+  return { severity };
+}
+
+// ===========================================================================
+// ON-DEMAND: Context-specific analysis (unchanged — used by on-demand graph)
+// ===========================================================================
+
 export function buildAnalysisMode(
   documentType: string | null,
   documentId: string | null
@@ -426,14 +507,9 @@ No specific document context — provide a general project analysis using all av
 4. Priority distribution analysis`;
 }
 
-/**
- * Analyze context for on-demand queries — LLM reasons about a specific
- * document the user is viewing.
- */
 export async function analyzeContext(
   state: FleetGraphStateType
 ): Promise<Partial<FleetGraphStateType>> {
-  // Guard: skip LLM when all data sources are empty (same as analyzeHealth)
   const hasAnyData =
     state.issues.length > 0 ||
     state.sprintData !== null ||
@@ -458,7 +534,6 @@ export async function analyzeContext(
   const now = new Date().toISOString();
   const analysisMode = buildAnalysisMode(state.documentType, state.documentId);
 
-  // Build document context section if available
   const contextSection = state.contextDocument
     ? `=== DOCUMENT CONTEXT ===
 Document: ${JSON.stringify(state.contextDocument.document)}
@@ -524,7 +599,6 @@ ${state.standupStatus ? JSON.stringify(state.standupStatus) : "No standup data a
   try {
     const findings = await invokeWithTool(prompt, "context_analysis", "analyze_context");
     const severity = determineSeverity(findings);
-
     return { findings, severity, errors: [] };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

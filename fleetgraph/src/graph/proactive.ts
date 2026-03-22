@@ -3,7 +3,7 @@ import { MemorySaver } from "@langchain/langgraph-checkpoint";
 import { FleetGraphState } from "../state.js";
 import { resolveContext } from "../nodes/context.js";
 import { fetchIssues, fetchSprint, fetchTeam, fetchStandups } from "../nodes/fetch.js";
-import { analyzeHealth } from "../nodes/reasoning.js";
+import { analyzeIssues, analyzeSprints, analyzeTeam, mergeFindings } from "../nodes/reasoning.js";
 import {
   proposeActions,
   confirmationGate,
@@ -16,7 +16,8 @@ import {
  *
  * Flow:
  *   START -> resolve_context -> [fetch_issues, fetch_sprint, fetch_team, fetch_standups] (parallel)
- *         -> analyze_health -> (clean? -> log_clean_run -> END)
+ *         -> [analyze_issues, analyze_sprints, analyze_team] (parallel)
+ *         -> merge_findings -> (clean? -> log_clean_run -> END)
  *                           -> (findings? -> propose_actions -> confirmation_gate -> END)
  *         -> (errors? -> graceful_degrade -> END)
  */
@@ -28,7 +29,10 @@ export function buildProactiveGraph() {
     .addNode("fetch_sprint", fetchSprint)
     .addNode("fetch_team", fetchTeam)
     .addNode("fetch_standups", fetchStandups)
-    .addNode("analyze_health", analyzeHealth)
+    .addNode("analyze_issues", analyzeIssues)
+    .addNode("analyze_sprints", analyzeSprints)
+    .addNode("analyze_team", analyzeTeam)
+    .addNode("merge_findings", mergeFindings)
     .addNode("propose_actions", proposeActions)
     .addNode("confirmation_gate", confirmationGate)
     .addNode("log_clean_run", logCleanRun)
@@ -37,20 +41,35 @@ export function buildProactiveGraph() {
     // Entry
     .addEdge("__start__", "resolve_context")
 
-    // Parallel fan-out from context to all fetch nodes
+    // Parallel fan-out: context → all fetch nodes
     .addEdge("resolve_context", "fetch_issues")
     .addEdge("resolve_context", "fetch_sprint")
     .addEdge("resolve_context", "fetch_team")
     .addEdge("resolve_context", "fetch_standups")
 
-    // All fetches converge into analysis
-    .addEdge("fetch_issues", "analyze_health")
-    .addEdge("fetch_sprint", "analyze_health")
-    .addEdge("fetch_team", "analyze_health")
-    .addEdge("fetch_standups", "analyze_health")
+    // All fetches converge into parallel analyzers
+    .addEdge("fetch_issues", "analyze_issues")
+    .addEdge("fetch_sprint", "analyze_issues")
+    .addEdge("fetch_team", "analyze_issues")
+    .addEdge("fetch_standups", "analyze_issues")
 
-    // Conditional branching after analysis
-    .addConditionalEdges("analyze_health", (state) => {
+    .addEdge("fetch_issues", "analyze_sprints")
+    .addEdge("fetch_sprint", "analyze_sprints")
+    .addEdge("fetch_team", "analyze_sprints")
+    .addEdge("fetch_standups", "analyze_sprints")
+
+    .addEdge("fetch_issues", "analyze_team")
+    .addEdge("fetch_sprint", "analyze_team")
+    .addEdge("fetch_team", "analyze_team")
+    .addEdge("fetch_standups", "analyze_team")
+
+    // All analyzers converge into merge
+    .addEdge("analyze_issues", "merge_findings")
+    .addEdge("analyze_sprints", "merge_findings")
+    .addEdge("analyze_team", "merge_findings")
+
+    // Conditional branching after merge
+    .addConditionalEdges("merge_findings", (state) => {
       // All data sources failed — degrade gracefully
       if (
         state.errors.length > 0 &&
