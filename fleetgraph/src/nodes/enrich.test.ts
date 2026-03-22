@@ -57,7 +57,7 @@ describe("enrichAssociations", () => {
     const result = await enrichAssociations(makeState(issues));
     const enriched = result.issues!;
     expect(enriched).toHaveLength(1);
-    expect(enriched[0].belongs_to).toHaveLength(2);
+    expect(enriched[0]!.belongs_to).toHaveLength(2);
     // No API calls needed
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -88,9 +88,9 @@ describe("enrichAssociations", () => {
 
     expect(enriched).toHaveLength(2);
     // First issue unchanged
-    expect(enriched[0].belongs_to).toHaveLength(2);
+    expect(enriched[0]!.belongs_to).toHaveLength(2);
     // Second issue now has program inferred
-    const orphanBelongsTo = enriched[1].belongs_to as Array<{ id: string; type: string }>;
+    const orphanBelongsTo = enriched[1]!.belongs_to as Array<{ id: string; type: string }>;
     expect(orphanBelongsTo).toHaveLength(2);
     expect(orphanBelongsTo.find((a) => a.type === "program")).toEqual({
       id: "prog-1",
@@ -132,7 +132,7 @@ describe("enrichAssociations", () => {
     const enriched = result.issues!;
 
     expect(enriched).toHaveLength(1);
-    const belongsTo = enriched[0].belongs_to as Array<{ id: string; type: string }>;
+    const belongsTo = enriched[0]!.belongs_to as Array<{ id: string; type: string }>;
     expect(belongsTo).toHaveLength(2);
     expect(belongsTo.find((a) => a.type === "program")).toEqual({
       id: "prog-1",
@@ -162,9 +162,9 @@ describe("enrichAssociations", () => {
 
     // Issue unchanged — still only has project
     expect(enriched).toHaveLength(1);
-    const belongsTo = enriched[0].belongs_to as Array<{ id: string; type: string }>;
+    const belongsTo = enriched[0]!.belongs_to as Array<{ id: string; type: string }>;
     expect(belongsTo).toHaveLength(1);
-    expect(belongsTo[0].type).toBe("project");
+    expect(belongsTo[0]!.type).toBe("project");
   });
 
   it("deduplicates API calls — one call per unique orphaned project", async () => {
