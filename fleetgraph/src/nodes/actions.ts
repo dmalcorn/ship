@@ -77,7 +77,7 @@ export async function dataUnchanged(
   state: FleetGraphStateType
 ): Promise<Partial<FleetGraphStateType>> {
   console.log("[data_unchanged] Data unchanged — no new analysis needed");
-  return {};
+  return { severity: "unchanged" as const };
 }
 
 /**

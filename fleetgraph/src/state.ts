@@ -111,7 +111,7 @@ export const FleetGraphState = Annotation.Root({
     reducer: (prev, next) => [...prev, ...next],
     default: () => [],
   }),
-  severity: Annotation<"clean" | "info" | "warning" | "critical">({
+  severity: Annotation<"clean" | "unchanged" | "info" | "warning" | "critical">({
     reducer: (_, next) => next,
     default: () => "clean" as const,
   }),
