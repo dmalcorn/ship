@@ -649,7 +649,13 @@ async function runProactiveHealthCheck(): Promise<void> {
       return;
     }
 
-    // Clean run — reset hash so next cron re-analyzes the same data
+    // Data unchanged — change_detection skipped the LLM. Keep existing findings.
+    if (!result.dataChanged) {
+      console.log("[cron] data unchanged — keeping existing findings");
+      return;
+    }
+
+    // Clean run (LLM ran but found nothing) — reset hash so next cron re-analyzes
     resetDataHash();
     storedFindings = [];
     console.log("[cron] clean run, no issues detected — will re-analyze next cycle");
