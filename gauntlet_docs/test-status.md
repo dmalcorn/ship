@@ -1,6 +1,6 @@
 # Test Status
 
-Last updated: 2026-03-21
+Last updated: 2026-03-22
 
 ---
 
@@ -10,9 +10,9 @@ Last updated: 2026-03-21
 |----------|------:|------:|-------:|-------:|------------|
 | API unit tests | 492 | 31 | 492 | 0 | `pnpm test` |
 | Web unit tests | 230 | 25 | 230 | 0 | `cd web && npx vitest run` |
-| FleetGraph tests | 92 | 6 | 92 | 0 | `cd fleetgraph && npx vitest run` |
-| E2E tests (all) | 880 | 72 | — | — | `pnpm test:e2e` |
-| **Total** | **1,694** | **134** | — | — | — |
+| FleetGraph tests | 79 | 6 | 79 | 0 | `cd fleetgraph && npx vitest run` |
+| E2E tests (all) | 870 | 72 | 864 | 6 | `pnpm test:e2e` |
+| **Total** | **1,671** | **134** | **1,665** | **6** | — |
 
 ---
 
@@ -49,14 +49,14 @@ Tests are organized into 8 Playwright projects so you can run targeted subsets i
 
 | Command | Project | Tests | Files | Runtime |
 |---------|---------|------:|------:|--------:|
-| `pnpm test:e2e:ui-tests` | ui | ~229 | 16 | TBD |
-| `pnpm test:e2e:data` | data | ~155 | 17 | TBD |
-| `pnpm test:e2e:security` | security | 110 | 5 | TBD |
-| `pnpm test:e2e:content` | content | 109 | 11 | TBD |
-| `pnpm test:e2e:integration` | integration | ~103 | 12 | TBD |
-| `pnpm test:e2e:a11y` | a11y | ~69 | 4 | TBD |
-| `pnpm test:e2e:api` | api | ~32 | 4 | TBD |
-| `pnpm test:e2e:perf` | perf | 15 | 1 | TBD |
+| `pnpm test:e2e:ui-tests` | ui | 275 | 16 | 10.8m (2 workers) — 3 flaky (passed on retry) |
+| `pnpm test:e2e:data` | data | 153 | 17 | 8.9m (2 workers) — 2 failed (Yjs persistence lag) |
+| `pnpm test:e2e:security` | security | 110 | 5 | 5.0m (2 workers) |
+| `pnpm test:e2e:content` | content | 107 | 11 | 8.2m (2 workers) |
+| `pnpm test:e2e:integration` | integration | 107 | 12 | 13.4m (2 workers) — 4 failed (FleetGraph no-service), 1 flaky (Yjs lag) |
+| `pnpm test:e2e:a11y` | a11y | 76 | 4 | 4.5m (2 workers) |
+| `pnpm test:e2e:api` | api | 31 | 4 | 4.0m (2 workers) |
+| `pnpm test:e2e:perf` | perf | 14 | 1 | 4.7m (2 workers) |
 
 **Runtime column:** Update after running each category to build a time baseline. Runtime depends on worker count and host machine — record the worker count alongside.
 
@@ -90,43 +90,51 @@ npx playwright test --project=content --project=perf    # Mix and match as neede
 
 ---
 
-## E2E Test Results (Last Full Run)
+## E2E Test Results — By-Category Run
 
-**Date:** 2026-03-17
+**Date:** 2026-03-22
 **Workers:** 2
-**Runtime:** ~1.1 hours (initial run); ~6 min (targeted rerun)
-**Pass rate:** 98.6% (860 / 872) — up from 97.8% after fixes
-**Environment:** Devcontainer (see `test-prerequisites.md` for setup requirements)
+**Total runtime:** ~59.5 minutes (sum of all categories)
+**Total tests run:** 870
+**Pass rate:** 99.3% (864 / 870)
+**Environment:** Devcontainer
 
 ### Summary
 
-| Outcome | Count | Change |
-|---------|------:|--------|
-| Passed | 860 | +7 |
-| Failed (after retries) | 6 | -7 |
-| Flaky (passed on retry) | 6 | — |
+| Outcome | Count |
+|---------|------:|
+| Passed | 864 |
+| Failed (after retries) | 6 |
+| Flaky (passed on retry) | 7 |
 
-### Fixes Applied
+### Category Results
 
-#### `programs.spec.ts` — 7 tests fixed (all now pass)
-
-**Root cause:** The `beforeEach` hook had a 5s timeout on `expect(page).not.toHaveURL('/login')` and no wait for the app to fully load. When a worker's containers were slow to warm up, the login succeeded but subsequent page navigation consumed the remaining 60s test timeout.
-
-**Fix:** Increased the login URL check timeout from 5s to 15s and added `page.waitForLoadState('networkidle')` after login to ensure the app is fully loaded before each test runs.
-
-**Verification:** All 16 tests in `programs.spec.ts` pass (including the 7 that previously failed consistently).
-
-#### `data-integrity.spec.ts` — 2 tests still fail (see Unfixable section below)
-
-**Partial fix applied:** Switched image upload from unreliable `page.waitForEvent('filechooser')` (CDP event) to `setInputFiles()` on `body > input[type="file"]` — same pattern that fixed `file-attachments.spec.ts`. Added explicit "Saved" indicator wait before reload. Image upload now works correctly in the editor.
-
-**Still failing because:** Content is visible in the editor before reload but missing after reload. Root cause is Yjs persistence lag (see below).
-
----
+| Category | Passed | Failed | Flaky | Runtime |
+|----------|-------:|-------:|------:|--------:|
+| api | 31 | 0 | 0 | 4.0m |
+| perf | 14 | 0 | 0 | 4.7m |
+| a11y | 76 | 0 | 0 | 4.5m |
+| integration | 102 | 4 | 1 | 13.4m |
+| content | 107 | 0 | 0 | 8.2m |
+| security | 110 | 0 | 0 | 5.0m |
+| data | 151 | 2 | 0 | 8.9m |
+| ui | 275 | 0 | 3 | 10.8m |
+| **Total** | **866** | **6** | **4** | **59.5m** |
 
 ### Remaining Failed Tests (6)
 
-#### `data-integrity.spec.ts` — 2 failures
+#### `fleetgraph-use-cases.spec.ts` — 4 failures (integration)
+
+| Test | Error |
+|------|-------|
+| UC1: Unassigned issues — proactive detection | FleetGraph service not running in test env |
+| UC2: Empty active sprint — proactive detection | FleetGraph service not running in test env |
+| UC3: Duplicate issues — proactive detection | FleetGraph service not running in test env |
+| UC5: Unowned security issues — critical severity | FleetGraph service not running in test env |
+
+**Root cause:** These tests require a running FleetGraph service (`FLEETGRAPH_SERVICE_URL`), which is not available in the E2E test environment.
+
+#### `data-integrity.spec.ts` — 2 failures (data)
 
 | Test | Error |
 |------|-------|
@@ -135,52 +143,26 @@ npx playwright test --project=content --project=perf    # Mix and match as neede
 
 **Root cause:** Yjs persistence lag (see Unfixable Issues below).
 
-#### `admin-workspace-members.spec.ts` — 1 failure
-
-| Test | Error |
-|------|-------|
-| back button returns to admin dashboard | `expect(page).toHaveURL(".../admin")` — navigation did not complete within timeout |
-
-**Root cause:** Navigation timing. The back button click triggers a route change that doesn't settle within the assertion timeout.
-
-#### `backlinks.spec.ts` — 1 failure
-
-| Test | Error |
-|------|-------|
-| removing mention removes backlink | Test timeout of 60000ms exceeded |
-
-**Root cause:** The test deletes a mention, then waits for a `/links` POST response and navigates to verify the backlink is removed. The link sync POST is debounced and the full round-trip exceeds 60s.
-
-#### `my-week-stale-data.spec.ts` — 1 failure
-
-| Test | Error |
-|------|-------|
-| plan edits are visible on /my-week after navigating back | Test timeout of 60000ms exceeded |
-
-**Root cause:** Yjs persistence lag. The test file itself documents this as `KNOWN FLAKY`.
-
-#### `performance.spec.ts` — 1 failure
-
-| Test | Error |
-|------|-------|
-| memory does not grow unbounded during editing | `page.goto` timed out in beforeEach |
-
-**Root cause:** Infrastructure-level timeout. The worker's servers were slow during this particular test's execution window.
-
 ---
 
-### Flaky Tests (6)
+### Flaky Tests (7)
 
-These tests failed on the first attempt but passed on retry.
+These tests failed on first attempt but passed on retry.
 
-| Spec | Test |
-|------|------|
-| `bulk-selection.spec.ts` | can select cards across multiple columns |
-| `issue-estimates.spec.ts` | shows estimate field in issue editor properties |
-| `programs.spec.ts` | program list shows issue and sprint counts |
-| `programs.spec.ts` | can navigate between programs using sidebar |
-| `project-weeks.spec.ts` | project link in Properties sidebar navigates back to project |
-| `weekly-accountability.spec.ts` | Allocation grid shows person with assigned issues and plan/retro status |
+| Category | Spec | Test |
+|----------|------|------|
+| integration | `my-week-stale-data.spec.ts` | plan edits visible after navigating back (Yjs lag) |
+| ui | `issues-bulk-operations.spec.ts` | can archive an issue via context menu |
+| ui | `status-overview-heatmap.spec.ts` | displays split cells for plan/retro status |
+| ui | `weekly-accountability.spec.ts` | Allocation grid shows person with assigned issues |
+
+### Previous Run (2026-03-17)
+
+The previous full run had 6 failures and 6 flaky tests. Key improvements since then:
+- `admin-workspace-members.spec.ts` back button — no longer failing
+- `backlinks.spec.ts` removing mention — no longer failing
+- `performance.spec.ts` memory test — no longer failing
+- `my-week-stale-data.spec.ts` — downgraded from hard failure to flaky (passes on retry)
 
 ---
 
