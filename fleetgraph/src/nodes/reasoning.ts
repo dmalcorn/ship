@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { FleetGraphStateType, Finding } from "../state.js";
 
 const model = new ChatAnthropic({
-  model: "claude-opus-4-6",
+  model: "claude-sonnet-4-6",
   temperature: 0,
   maxTokens: 8192,
 });
