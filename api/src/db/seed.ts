@@ -920,7 +920,7 @@ async function seed() {
         const result = await pool.query(
           `INSERT INTO documents (workspace_id, document_type, title, properties, created_by)
            VALUES ($1, 'issue', $2, $3, $4) RETURNING id`,
-          [workspaceId, title, JSON.stringify({ status, priority }), createdById]
+          [workspaceId, title, JSON.stringify({ state: status, priority }), createdById]
         );
         const issueId = result.rows[0].id;
         if (projectId) {
