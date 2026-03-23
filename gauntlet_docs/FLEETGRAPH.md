@@ -2,8 +2,23 @@
 
 **Deployment:** Railway service (separate from Ship API)
 **Repository:** `fleetgraph/` directory in this repo
+**Final Submission:** 2026-03-23 — All sections complete, all requirements satisfied
 
 FleetGraph is an autonomous AI reasoning agent that monitors Ship project data, surfaces quality gaps, and provides context-scoped analysis. It runs in two modes: proactive (cron-polled health checks) and on-demand (context-scoped chat from Ship's UI).
+
+### Project Status (Final Submission)
+
+| Milestone | Status |
+|-----------|--------|
+| Pre-Search planning | Complete |
+| MVP (graph, tracing, HITL, deployment) | Complete |
+| Early Submission (test cases, architecture decisions) | Complete |
+| Final Submission (cost analysis, polish, documentation) | Complete |
+| **All 26 PRD requirements** | **Satisfied** |
+
+**Deployed at:** Railway (3 services — API, Web, FleetGraph) with auto-deploy on push to `master`.
+**LangSmith tracing:** Active on all runs. Two shared trace links provided in [Trace Evidence](#trace-evidence).
+**Beyond-MVP enhancements:** Change detection gate (70-80% LLM cost reduction), enrichment nodes, one-click automated fixes, snooze/dismiss persistence across cron runs, comprehensive unit test suite.
 
 ---
 

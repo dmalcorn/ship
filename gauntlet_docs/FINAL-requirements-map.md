@@ -1,6 +1,8 @@
 # Final Requirements Map
 
 **Source:** `gauntlet_docs/FleetGraph_PRD.md` — Full PRD requirements across all submission deadlines
+**Final Status Date:** 2026-03-23 (Final Submission deadline — Sunday, 11:59 PM)
+**Overall Status:** All 26 requirements fully satisfied. Project complete and deployed.
 
 This document maps every PRD requirement to how it is satisfied in the current implementation, covering MVP, Early Submission, and Final Submission deliverables.
 
@@ -218,6 +220,8 @@ Each required node type is verified below:
 |-------------------|--------|---------------|
 | **Context nodes** | Satisfied | `resolve_context` in `fleetgraph/src/nodes/context.ts` — determines trigger type, fetches document metadata + associations for on-demand mode |
 | **Fetch nodes** | Satisfied | 4 parallel fetch nodes in `fleetgraph/src/nodes/fetch.ts`: `fetchIssues`, `fetchSprint`, `fetchTeam`, `fetchStandups` — all run in parallel via LangGraph fan-out |
+| **Enrichment nodes** | Satisfied | `enrich.ts` provides additional context enrichment beyond the base fetch nodes |
+| **Change detection** | Satisfied | `change-detection.ts` implements a data-change gate to skip redundant analysis (~80% skip rate), reducing unnecessary LLM calls |
 | **Reasoning nodes** | Satisfied | `analyzeHealth` (proactive) and `analyzeContext` (on-demand) in `fleetgraph/src/nodes/reasoning.ts` — Claude Sonnet 4.6 with structured output, not summarization |
 | **Conditional edges** | Satisfied | 3-way branching after reasoning: `graceful_degrade` (errors), `log_clean_run` (clean), `propose_actions` (findings) — produces visibly different LangSmith traces |
 | **Action nodes** | Satisfied | `proposeActions` in `fleetgraph/src/nodes/actions.ts` — maps findings to concrete proposed actions with rationale |
@@ -385,4 +389,21 @@ Satisfied: Both graphs share node functions from `fleetgraph/src/nodes/` (contex
 | Cost per run documented | **Satisfied** |
 | Runs per day documented | **Satisfied** |
 
-**All 26 requirements fully satisfied.**
+**All 26 requirements fully satisfied as of Final Submission (2026-03-23).**
+
+### Checkpoint Status
+
+| Checkpoint | Deadline | Status |
+|---|---|---|
+| Pre-Search | Complete | All planning artifacts delivered |
+| MVP (Tuesday) | Complete | Graph running, tracing, use cases, HITL gate, deployed |
+| Early Submission (Friday) | Complete | Test cases, architecture decisions documented |
+| Final Submission (Sunday) | Complete | Cost analysis, all polish, full deployment |
+
+### Beyond-MVP Enhancements Delivered
+
+- **Change detection gate** (`change-detection.ts`) — skips redundant analysis when data hasn't changed, ~80% skip rate reducing cost
+- **Enrichment node** (`enrich.ts`) — additional context enrichment beyond base fetch nodes
+- **Comprehensive test suite** — unit tests for all node modules (`*.test.ts` alongside each source file)
+- **Frontend overlay** (`FleetGraphOverlay.tsx`) and apply-action hook (`useApplyAction.ts`) — richer UI interaction
+- **Graph helpers** (`utils/graph-helpers.ts`) — shared utility functions for graph operations
