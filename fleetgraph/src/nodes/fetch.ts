@@ -3,7 +3,7 @@ import type { ContextDocument } from "../state.js";
 import { shipApi } from "../utils/ship-api.js";
 
 /** Max issues to fetch per run. Override with FLEETGRAPH_ISSUE_CAP env var. */
-const ISSUE_CAP = Math.max(1, parseInt(process.env.FLEETGRAPH_ISSUE_CAP || "50", 10)) || 50;
+const ISSUE_CAP = Math.max(1, parseInt(process.env.FLEETGRAPH_ISSUE_CAP || "200", 10)) || 200;
 
 /**
  * Extract essential fields from a raw issue object.

@@ -157,34 +157,38 @@ function extractFindings(text: string, label: string): { findings: Finding[]; su
 }
 
 // ---------------------------------------------------------------------------
-// Helper: build sprint membership data for prompts
+// Helper: extract belongs_to associations from an issue
 // ---------------------------------------------------------------------------
 
-function buildSprintMembership(state: FleetGraphStateType): { sprintIssueIds: Set<string>; membershipJson: string } {
-  const allSprints = (state.allSprints ?? []) as Record<string, unknown>[];
-  const sd = state.sprintData as Record<string, unknown> | null;
-  const sprintIssueIds = new Set<string>();
+interface BelongsToEntry {
+  id: string;
+  type: string;
+  title?: string;
+}
+
+function getBelongsTo(issue: Record<string, unknown>): BelongsToEntry[] {
+  const raw = issue.belongs_to;
+  return Array.isArray(raw) ? (raw as BelongsToEntry[]) : [];
+}
+
+function hasSprintAssoc(issue: Record<string, unknown>): boolean {
+  return getBelongsTo(issue).some(a => a.type === "sprint");
+}
+
+/** Build sprint membership JSON from issues' belongs_to data (covers all programs). */
+function buildMembershipJson(issues: Record<string, unknown>[]): string {
   const membership: Record<string, string[]> = {};
-
-  // Primary sprint issues
-  const primaryIssues = (sd?.sprintIssues ?? []) as Array<Record<string, unknown>>;
-  if (primaryIssues.length > 0) {
-    const name = (sd?.name ?? sd?.id ?? "primary") as string;
-    membership[name] = primaryIssues.map(i => i.id as string);
-    primaryIssues.forEach(i => sprintIssueIds.add(i.id as string));
+  for (const issue of issues) {
+    const sprint = getBelongsTo(issue).find(a => a.type === "sprint");
+    if (sprint) {
+      const name = sprint.title ?? sprint.id;
+      if (!membership[name]) membership[name] = [];
+      membership[name].push(issue.id as string);
+    }
   }
-
-  // Other sprints
-  for (const s of allSprints) {
-    const si = s.sprintIssues as Array<Record<string, unknown>> | undefined;
-    if (si) si.forEach(i => sprintIssueIds.add(i.id as string));
-  }
-
-  const membershipJson = Object.keys(membership).length > 0
+  return Object.keys(membership).length > 0
     ? JSON.stringify(membership)
-    : "Only primary sprint membership available — issues NOT in this list may be unscheduled";
-
-  return { sprintIssueIds, membershipJson };
+    : "No sprint membership data available";
 }
 
 // ===========================================================================
@@ -213,13 +217,13 @@ export async function analyzeHealth(
 
   // --- Deterministic pre-computation ---
 
-  // Sprint membership
-  const { sprintIssueIds, membershipJson } = buildSprintMembership(state);
-  const noSprint = issues.filter(i => !sprintIssueIds.has(i.id as string));
+  // Sprint membership (derived from each issue's belongs_to associations)
+  const membershipJson = buildMembershipJson(issues);
+  const noSprint = issues.filter(i => !hasSprintAssoc(i));
   const emptySprints = allSprints.filter(s => (Number(s.issue_count) || 0) === 0);
   const unassigned = issues.filter(i => !i.assignee_id);
   const highPriUnsched = issues.filter(i =>
-    (i.priority === "urgent" || i.priority === "high") && !sprintIssueIds.has(i.id as string)
+    (i.priority === "urgent" || i.priority === "high") && !hasSprintAssoc(i)
   );
 
   // Workload summary
@@ -247,14 +251,11 @@ export async function analyzeHealth(
     return status === "blocked";
   });
 
-  // In-progress sprint issues (for stale detection)
-  const sprintInProgress = (() => {
-    const sprintIssues = (sd?.sprintIssues ?? []) as Array<Record<string, unknown>>;
-    return sprintIssues.filter(i => {
-      const status = (i.state ?? i.status ?? "") as string;
-      return status === "in_progress" || status === "in-progress";
-    });
-  })();
+  // In-progress issues in any sprint (for stale detection)
+  const sprintInProgress = issues.filter(i => {
+    const status = (i.status ?? "") as string;
+    return (status === "in_progress" || status === "in-progress") && hasSprintAssoc(i);
+  });
 
   console.log(
     `[analyze_health] ${issues.length} issues, ${unassigned.length} unassigned, ` +
